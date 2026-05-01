@@ -3,9 +3,23 @@ import { Printer } from "lucide-react";
 import api from "../../services/api";
 import { useAuthStore } from "../../store/auth";
 import { imprimirRecibo } from "../../components/Recibo";
+import { useMeses } from "../../hooks/useMeses";
+import SaftButton from "../../components/SaftButton";
+
+const TIPO_LABEL = { mensalidade: "Mensalidade", matricula: "Matrícula", emolumento: "Emolumento", outro: "Outro" };
+
+function formatMesRef(mr, meses) {
+  if (!mr || !meses?.length) return mr || "";
+  let m = mr.match(/^(\d{4})-(\d{4})-(\d{1,2})$/);
+  if (m) { const n = meses.find(x => x.id === Number(m[3]))?.nome; return n ? `${n} ${m[1]}-${m[2]}` : mr; }
+  m = mr.match(/^(\d{4})-(\d{1,2})$/);
+  if (m) { const n = meses.find(x => x.id === Number(m[2]))?.nome; return n ? `${n} ${m[1]}` : mr; }
+  return mr;
+}
 
 export default function Pagamentos() {
   const { escola } = useAuthStore();
+  const meses = useMeses();
 
   const [pagamentos, setPagamentos] = useState([]);
   const [stats, setStats] = useState({});
@@ -167,7 +181,10 @@ export default function Pagamentos() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">💰 Finanças & Propinas</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-800">💰 Finanças & Propinas</h1>
+        <SaftButton variant="outline"/>
+      </div>
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
@@ -314,10 +331,15 @@ export default function Pagamentos() {
                   <td className="px-6 py-4 text-sm font-mono text-gray-500">{p.referencia}</td>
                   <td className="px-6 py-4 text-sm font-medium text-gray-800">{p.aluno?.user?.nome}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">
-                    <div className="font-medium">{p.observacao || p.tipo}</div>
-                    {p.observacao && <div className="text-xs text-gray-400 capitalize">{p.tipo}</div>}
+                    <div className="font-medium">
+                      {p.propina?.nome || p.emolumento?.nome || p.plano?.nome || p.observacao || TIPO_LABEL[p.tipo] || p.tipo}
+                    </div>
+                    {(p.propina?.nivel || p.propina?.turno) && (
+                      <div className="text-xs text-gray-500">{[p.propina.nivel, p.propina.turno].filter(Boolean).join(" · ")}</div>
+                    )}
+                    <div className="text-xs text-gray-400 capitalize">{TIPO_LABEL[p.tipo] || p.tipo}</div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{p.mes_referencia||"—"}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">{formatMesRef(p.mes_referencia, meses) || "—"}</td>
                   <td className="px-6 py-4 text-sm text-gray-500">
                     {p.data_pagamento ? new Date(p.data_pagamento).toLocaleDateString("pt-AO") : "—"}
                   </td>

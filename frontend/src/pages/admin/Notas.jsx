@@ -59,17 +59,67 @@ function MsgBanner({ msg }) {
   );
 }
 
-function Filtros({ filtro, setFiltro, turmas, extraSlot }) {
+function Filtros({ filtro, setFiltro, extraSlot }) {
+  const [cursos,  setCursos]  = useState([]);
+  const [turnos,  setTurnos]  = useState([]);
+  const [classes, setClasses] = useState([]);
+  const [turmas,  setTurmas]  = useState([]);
+
+  useEffect(() => {
+    api.get("/cursos").then(r => setCursos(r.data.data || r.data)).catch(() => {});
+    api.get("/turnos").then(r => setTurnos(r.data.data || r.data)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setFiltro(f => ({ ...f, classe_id: "", turma_id: "" }));
+    setClasses([]); setTurmas([]);
+    if (!filtro.curso_id) return;
+    api.get(`/classes?curso_id=${filtro.curso_id}`).then(r => setClasses(r.data)).catch(() => {});
+  }, [filtro.curso_id]);
+
+  useEffect(() => {
+    setFiltro(f => ({ ...f, turma_id: "" }));
+    if (!filtro.classe_id) { setTurmas([]); return; }
+    const params = new URLSearchParams({ classe_id: filtro.classe_id });
+    if (filtro.turno_id) params.append("turno_id", filtro.turno_id);
+    api.get(`/turmas?${params}`).then(r => setTurmas(r.data)).catch(() => {});
+  }, [filtro.classe_id, filtro.turno_id]);
+
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-      <div className={`grid grid-cols-1 gap-4 ${extraSlot ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+      {/* Cascata Curso → Classe → Turno → Turma */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1">Turma</label>
-          <select value={filtro.turma_id} onChange={e => setFiltro(f => ({ ...f, turma_id: e.target.value }))} className={sel}>
-            <option value="">Seleccionar turma...</option>
-            {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+          <label className="block text-xs font-medium text-slate-500 mb-1">Curso</label>
+          <select value={filtro.curso_id || ""} onChange={e => setFiltro(f => ({ ...f, curso_id: e.target.value }))} className={sel}>
+            <option value="">Seleccionar...</option>
+            {cursos.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
           </select>
         </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">Classe</label>
+          <select value={filtro.classe_id || ""} onChange={e => setFiltro(f => ({ ...f, classe_id: e.target.value }))} disabled={!filtro.curso_id} className={`${sel} disabled:opacity-50`}>
+            <option value="">{filtro.curso_id ? "Seleccionar..." : "← Curso primeiro"}</option>
+            {classes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">Turno</label>
+          <select value={filtro.turno_id || ""} onChange={e => setFiltro(f => ({ ...f, turno_id: e.target.value }))} disabled={!filtro.classe_id} className={`${sel} disabled:opacity-50`}>
+            <option value="">Todos</option>
+            {turnos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">Turma</label>
+          <select value={filtro.turma_id || ""} onChange={e => setFiltro(f => ({ ...f, turma_id: e.target.value }))} disabled={!filtro.classe_id} className={`${sel} disabled:opacity-50`}>
+            <option value="">{filtro.classe_id ? (turmas.length ? "Seleccionar..." : "Sem turmas") : "← Classe primeiro"}</option>
+            {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}{t.turnoObj ? ` · ${t.turnoObj.nome}` : ""}</option>)}
+          </select>
+        </div>
+      </div>
+      {/* Trimestre + Ano Lectivo + slot extra */}
+      <div className={`grid grid-cols-1 gap-3 ${extraSlot ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
         {extraSlot}
         <div>
           <label className="block text-xs font-medium text-slate-500 mb-1">Trimestre</label>
@@ -170,7 +220,7 @@ function PorDisciplina({ filtro, setFiltro, turmas }) {
 
   return (
     <div className="space-y-4">
-      <Filtros filtro={filtro} setFiltro={setFiltro} turmas={turmas} extraSlot={discSlot} />
+      <Filtros filtro={filtro} setFiltro={setFiltro} extraSlot={discSlot} />
       <MsgBanner msg={msg} />
 
       {(!filtro.turma_id || !discId) && (
@@ -294,7 +344,7 @@ function PautaCompleta({ filtro, setFiltro, turmas }) {
 
   return (
     <div className="space-y-4">
-      <Filtros filtro={filtro} setFiltro={setFiltro} turmas={turmas} extraSlot={null} />
+      <Filtros filtro={filtro} setFiltro={setFiltro} extraSlot={null} />
       <MsgBanner msg={msg} />
 
       {!filtro.turma_id && (
@@ -405,10 +455,7 @@ function PautaCompleta({ filtro, setFiltro, turmas }) {
 ───────────────────────────────────────────────────── */
 export default function Notas() {
   const [tab,    setTab]    = useState("disciplina");
-  const [turmas, setTurmas] = useState([]);
-  const [filtro, setFiltro] = useState({ turma_id: "", periodo: "1", ano_letivo: "2025-2026" });
-
-  useEffect(() => { api.get("/turmas").then(r => setTurmas(r.data)); }, []);
+  const [filtro, setFiltro] = useState({ curso_id: "", classe_id: "", turno_id: "", turma_id: "", periodo: "1", ano_letivo: "2025-2026" });
 
   return (
     <div className="space-y-5">
@@ -427,8 +474,8 @@ export default function Notas() {
       </div>
 
       {tab === "disciplina"
-        ? <PorDisciplina filtro={filtro} setFiltro={setFiltro} turmas={turmas} />
-        : <PautaCompleta filtro={filtro} setFiltro={setFiltro} turmas={turmas} />
+        ? <PorDisciplina filtro={filtro} setFiltro={setFiltro} />
+        : <PautaCompleta filtro={filtro} setFiltro={setFiltro} />
       }
     </div>
   );

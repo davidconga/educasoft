@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   UserPlus, ClipboardList, CheckCircle, Printer,
-  Search, ChevronDown, AlertCircle, X,
+  Search, ChevronDown, AlertCircle, X, Ban, ArrowRightLeft, RotateCcw,
 } from "lucide-react";
 import api from "../../services/api";
 import { useAuthStore } from "../../store/auth";
@@ -33,8 +33,19 @@ function ModalInscricao({ onClose, onSaved }) {
   const [step, setStep] = useState(1);
   const [alunoData, setAlunoData] = useState({
     nome:"", email:"", telefone:"", data_nascimento:"", genero:"",
-    bi:"", naturalidade:"", nome_pai:"", nome_mae:"",
+    bi:"", naturalidade:"", nacionalidade:"", nome_pai:"", nome_mae:"",
     telefone_responsavel:"", endereco:"",
+  });
+  const [docData, setDocData] = useState({
+    provincia:"", municipio:"", bairro:"",
+    bi_emissao_data:"", bi_emissao_local:"",
+    bi_pai:"", profissao_pai:"",
+    bi_mae:"", profissao_mae:"",
+    nome_encarregado:"", relacao_encarregado:"", bi_encarregado:"",
+    telefone_encarregado:"", email_encarregado:"", profissao_encarregado:"",
+    tipo_sanguineo:"", alergias:"", observacoes_medicas:"",
+    escola_anterior:"", classe_anterior:"", ano_anterior:"",
+    religiao:"",
   });
   const [matData, setMatData] = useState({
     curso_id:"", classe_id:"", turma_id:"",
@@ -44,7 +55,6 @@ function ModalInscricao({ onClose, onSaved }) {
   const [cursos,  setCursos]  = useState([]);
   const [classes, setClasses] = useState([]);
   const [turmas,  setTurmas]  = useState([]);
-  const [novoAluno, setNovoAluno] = useState(null);
   const [saving, setSaving]   = useState(false);
   const [error,  setError]    = useState("");
 
@@ -69,30 +79,79 @@ function ModalInscricao({ onClose, onSaved }) {
     api.get(`/turmas?classe_id=${matData.classe_id}`).then(r => setTurmas(r.data)).catch(() => {});
   }, [matData.classe_id]);
 
-  const handleAluno = async (e) => {
+  // Step 1 → apenas valida campos do aluno e avança (sem chamar API)
+  const handleAluno = (e) => {
+    e.preventDefault();
+    setError("");
+    if (!alunoData.nome.trim() || !alunoData.email.trim()) {
+      setError("Nome e email são obrigatórios.");
+      return;
+    }
+    setStep(2);
+  };
+
+  // Step 2 → apenas avança para a etapa de matrícula (campos opcionais, sem validação obrigatória)
+  const handleDoc = (e) => {
+    e.preventDefault();
+    setError("");
+    setStep(3);
+  };
+
+  // Step 3 → envia tudo numa única chamada (cria aluno + documento + matrícula atomicamente)
+  const handleMatricula = async (e) => {
     e.preventDefault(); setSaving(true); setError("");
+    const documento = Object.fromEntries(
+      Object.entries(docData).filter(([, v]) => v !== "" && v !== null)
+    );
+    const basePayload = {
+      ...alunoData,
+      turma_id:       matData.turma_id,
+      ano_letivo:     matData.ano_letivo,
+      data_matricula: matData.data_matricula,
+      tipo:           "nova",
+      documento,
+    };
+    const enviar = async (forcar = false) =>
+      api.post("/matriculas" + (forcar ? "?forcar=1" : ""), basePayload);
     try {
-      const res = await api.post("/alunos", alunoData);
-      setNovoAluno(res.data.aluno);
-      setStep(2);
-    } catch (err) { setError(err.response?.data?.message || "Erro ao criar aluno."); }
+      const res = await enviar(false);
+      onSaved(res.data.matricula);
+    } catch (err) {
+      // 422 com turma_cheia → oferece forçar
+      if (err.response?.status === 422 && err.response?.data?.turma_cheia) {
+        const d = err.response.data;
+        const msg = `${d.message}\n\nA turma já atingiu (ou ultrapassou) a capacidade da sala.\n\nDeseja inscrever este aluno mesmo assim?`;
+        if (window.confirm(msg)) {
+          try {
+            const res2 = await enviar(true);
+            onSaved(res2.data.matricula);
+            return;
+          } catch (e2) {
+            setError(e2.response?.data?.message || "Erro ao forçar inscrição.");
+            return;
+          } finally { setSaving(false); }
+        }
+        setSaving(false);
+        return;
+      }
+      const errs = err.response?.data?.errors;
+      const firstErr = errs ? Object.values(errs)[0]?.[0] : null;
+      setError(firstErr || err.response?.data?.message || "Erro ao criar inscrição.");
+    }
     finally { setSaving(false); }
   };
 
-  const handleMatricula = async (e) => {
-    e.preventDefault(); setSaving(true); setError("");
-    try {
-      const payload = {
-        aluno_id:       novoAluno.id,
-        turma_id:       matData.turma_id,
-        ano_letivo:     matData.ano_letivo,
-        data_matricula: matData.data_matricula,
-      };
-      const res = await api.post("/matriculas", payload);
-      onSaved(res.data.matricula);
-    } catch (err) { setError(err.response?.data?.message || "Erro ao criar matrícula."); }
-    finally { setSaving(false); }
-  };
+  const docField = (label, key, props = {}) => (
+    <div>
+      <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
+      <input
+        value={docData[key] ?? ""}
+        onChange={e => setDocData(s => ({...s, [key]: e.target.value}))}
+        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
+        {...props}
+      />
+    </div>
+  );
 
   const sel = (label, key, options, placeholder, extra = {}) => (
     <div>
@@ -104,8 +163,24 @@ function ModalInscricao({ onClose, onSaved }) {
         {...extra}
       >
         <option value="">{placeholder}</option>
-        {options.map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}
+        {options.map(o => {
+          // Para turmas, mostrar vagas/capacidade
+          if (key === "turma_id" && o.capacidade_efetiva !== undefined) {
+            const cheia = o.vagas <= 0 && o.capacidade_efetiva > 0;
+            const txt = `${o.nome} — ${o.ocupacao ?? 0}/${o.capacidade_efetiva}${cheia ? " · CHEIA" : (o.vagas <= 3 && o.vagas > 0 ? ` · ${o.vagas} vaga(s)` : "")}`;
+            return <option key={o.id} value={o.id}>{txt}</option>;
+          }
+          return <option key={o.id} value={o.id}>{o.nome}</option>;
+        })}
       </select>
+      {key === "turma_id" && matData.turma_id && (() => {
+        const t = options.find(o => String(o.id) === String(matData.turma_id));
+        if (!t || t.capacidade_efetiva === undefined) return null;
+        const cheia = t.vagas <= 0 && t.capacidade_efetiva > 0;
+        if (cheia) return <p className="text-xs text-red-600 mt-1 font-medium">⚠ Turma sem vagas ({t.ocupacao}/{t.capacidade_efetiva}). O sistema vai pedir confirmação.</p>;
+        if (t.vagas <= 3) return <p className="text-xs text-amber-600 mt-1">⚠ Apenas {t.vagas} vaga(s) restante(s).</p>;
+        return null;
+      })()}
     </div>
   );
 
@@ -132,10 +207,10 @@ function ModalInscricao({ onClose, onSaved }) {
             <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X size={16}/></button>
           </div>
           <div className="flex gap-2">
-            {[{n:1,label:"Dados do Aluno"},{n:2,label:"Matrícula"}].map(s => (
-              <div key={s.n} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium
+            {[{n:1,label:"Dados"},{n:2,label:"Documentação"},{n:3,label:"Matrícula"}].map(s => (
+              <div key={s.n} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium flex-1 justify-center
                 ${step===s.n?"bg-blue-600 text-white":step>s.n?"bg-emerald-50 text-emerald-700":"bg-slate-100 text-slate-400"}`}>
-                {step>s.n ? <CheckCircle size={14}/> : <span className="w-4 h-4 rounded-full border-2 border-current flex items-center justify-center text-[10px]">{s.n}</span>}
+                {step>s.n ? <CheckCircle size={12}/> : <span className="w-4 h-4 rounded-full border-2 border-current flex items-center justify-center text-[10px]">{s.n}</span>}
                 {s.label}
               </div>
             ))}
@@ -166,6 +241,7 @@ function ModalInscricao({ onClose, onSaved }) {
               </div>
               {field("Bilhete de Identidade","bi")}
               {field("Naturalidade","naturalidade")}
+              {field("Nacionalidade","nacionalidade",{placeholder:"Angolana"})}
               {field("Nome do Pai","nome_pai")}
               {field("Nome da Mãe","nome_mae")}
               {field("Tel. Responsável","telefone_responsavel")}
@@ -180,12 +256,125 @@ function ModalInscricao({ onClose, onSaved }) {
           </form>
         )}
 
-        {/* Step 2: matrícula com seleção em cascata */}
-        {step === 2 && novoAluno && (
+        {/* Step 2: documentação extendida (todos campos opcionais) */}
+        {step === 2 && (
+          <form onSubmit={handleDoc} className="p-6 space-y-5">
+            <p className="text-xs text-slate-400 -mt-1">Todos os campos são opcionais — pode preencher agora ou depois pela ficha do aluno.</p>
+
+            <section>
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Endereço detalhado</h3>
+              <div className="grid grid-cols-3 gap-3">
+                {docField("Província","provincia")}
+                {docField("Município","municipio")}
+                {docField("Bairro","bairro")}
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">BI do aluno</h3>
+              <div className="grid grid-cols-2 gap-3">
+                {docField("Data de emissão","bi_emissao_data",{type:"date"})}
+                {docField("Local de emissão","bi_emissao_local")}
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Pai</h3>
+              <div className="grid grid-cols-2 gap-3">
+                {docField("BI do Pai","bi_pai")}
+                {docField("Profissão do Pai","profissao_pai")}
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Mãe</h3>
+              <div className="grid grid-cols-2 gap-3">
+                {docField("BI da Mãe","bi_mae")}
+                {docField("Profissão da Mãe","profissao_mae")}
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Encarregado de Educação <span className="font-normal text-slate-400">(se diferente de pai/mãe)</span></h3>
+              <div className="grid grid-cols-2 gap-3">
+                {docField("Nome","nome_encarregado")}
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Relação</label>
+                  <select value={docData.relacao_encarregado} onChange={e => setDocData(s=>({...s, relacao_encarregado:e.target.value}))}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-slate-50">
+                    <option value="">—</option>
+                    <option value="pai">Pai</option>
+                    <option value="mae">Mãe</option>
+                    <option value="tutor">Tutor</option>
+                    <option value="tio">Tio(a)</option>
+                    <option value="avo">Avô/Avó</option>
+                    <option value="irmao">Irmão(ã)</option>
+                    <option value="outro">Outro</option>
+                  </select>
+                </div>
+                {docField("BI do Encarregado","bi_encarregado")}
+                {docField("Profissão","profissao_encarregado")}
+                {docField("Telefone","telefone_encarregado")}
+                {docField("Email","email_encarregado",{type:"email"})}
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Saúde</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Tipo Sanguíneo</label>
+                  <select value={docData.tipo_sanguineo} onChange={e => setDocData(s=>({...s, tipo_sanguineo:e.target.value}))}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-slate-50">
+                    <option value="">—</option>
+                    {["A+","A-","B+","B-","AB+","AB-","O+","O-"].map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div className="col-span-1"/>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Alergias</label>
+                  <textarea value={docData.alergias} onChange={e => setDocData(s=>({...s, alergias:e.target.value}))} rows={2}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-slate-50"/>
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Observações Médicas</label>
+                  <textarea value={docData.observacoes_medicas} onChange={e => setDocData(s=>({...s, observacoes_medicas:e.target.value}))} rows={2}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-slate-50"/>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Histórico Académico</h3>
+              <div className="grid grid-cols-3 gap-3">
+                {docField("Escola Anterior","escola_anterior")}
+                {docField("Classe Concluída","classe_anterior")}
+                {docField("Ano da Última Matrícula","ano_anterior",{placeholder:"ex: 2024-2025"})}
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Outros</h3>
+              <div className="grid grid-cols-2 gap-3">
+                {docField("Religião","religiao")}
+              </div>
+            </section>
+
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => setStep(1)} className="flex-1 border border-slate-200 text-slate-600 py-2.5 rounded-xl text-sm font-medium">← Voltar</button>
+              <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-sm font-medium">
+                Seguinte →
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Step 3: matrícula com seleção em cascata */}
+        {step === 3 && (
           <form onSubmit={handleMatricula} className="p-6 space-y-4">
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-700 flex items-center gap-2">
+            <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-700 flex items-center gap-2">
               <CheckCircle size={14}/>
-              Aluno <strong>{novoAluno.user?.nome}</strong> criado com nº <strong>{novoAluno.numero_aluno}</strong>
+              Inscrição para <strong>{alunoData.nome}</strong> · {alunoData.email}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -217,7 +406,7 @@ function ModalInscricao({ onClose, onSaved }) {
             </div>
 
             <div className="flex gap-3 pt-2">
-              <button type="button" onClick={() => setStep(1)} className="flex-1 border border-slate-200 text-slate-600 py-2.5 rounded-xl text-sm font-medium">← Voltar</button>
+              <button type="button" onClick={() => setStep(2)} className="flex-1 border border-slate-200 text-slate-600 py-2.5 rounded-xl text-sm font-medium">← Voltar</button>
               <button type="submit" disabled={saving || !matData.turma_id}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-sm font-medium disabled:opacity-60">
                 {saving ? "A guardar..." : "Concluir Inscrição"}
@@ -241,6 +430,7 @@ export default function Matriculas() {
   const [anoLetivo, setAnoLetivo] = useState(ANO_ATUAL);
   const [selected, setSelected] = useState([]);
   const [showInscricao, setShowInscricao] = useState(false);
+  const [transferindo,  setTransferindo]  = useState(null); // matricula em transferência
   const [confirmando, setConfirmando] = useState(false);
   const [toast, setToast]       = useState(null);
   const [pagina, setPagina]     = useState(1);
@@ -277,13 +467,34 @@ export default function Matriculas() {
   const selectedMats = matriculas.filter(m => selected.includes(m.id));
 
   const handleConfirmarUma = async (matricula) => {
+    const tentarConfirmar = async (forcar = false) => {
+      const url = forcar
+        ? `/matriculas/${matricula.id}/confirmar?forcar=1`
+        : `/matriculas/${matricula.id}/confirmar`;
+      return api.patch(url);
+    };
     try {
-      const res = await api.patch(`/matriculas/${matricula.id}/confirmar`);
+      const res = await tentarConfirmar(false);
       showToast("Matrícula confirmada com sucesso.");
       imprimirComprovativoMatricula(res.data.matricula, escola);
       load();
       setSelected(s => s.filter(id => id !== matricula.id));
     } catch (err) {
+      const faltam = err.response?.data?.documentos_em_falta;
+      if (err.response?.status === 422 && Array.isArray(faltam) && faltam.length) {
+        const msg = `Faltam documentos obrigatórios:\n\n  • ${faltam.join("\n  • ")}\n\nDeseja confirmar mesmo assim?`;
+        if (!confirm(msg)) return;
+        try {
+          const res = await tentarConfirmar(true);
+          showToast("Matrícula confirmada (forçada).");
+          imprimirComprovativoMatricula(res.data.matricula, escola);
+          load();
+          setSelected(s => s.filter(id => id !== matricula.id));
+        } catch (e2) {
+          showToast(e2.response?.data?.message || "Erro ao forçar confirmação.", "error");
+        }
+        return;
+      }
       showToast(err.response?.data?.message || "Erro ao confirmar.", "error");
     }
   };
@@ -291,8 +502,10 @@ export default function Matriculas() {
   const handleConfirmarSelecionadas = async () => {
     if (!selected.length) return;
     setConfirmando(true);
+    const enviar = async (forcar = false) =>
+      api.post("/matriculas/confirmar-multiplas", { ids: selected, forcar });
     try {
-      const res = await api.post("/matriculas/confirmar-multiplas", { ids: selected });
+      const res = await enviar(false);
       showToast(res.data.message);
       if (res.data.matriculas?.length) {
         imprimirComprovativoMatricula(res.data.matriculas, escola);
@@ -300,7 +513,23 @@ export default function Matriculas() {
       setSelected([]);
       load();
     } catch (err) {
-      showToast(err.response?.data?.message || "Erro.", "error");
+      const bloq = err.response?.data?.bloqueadas;
+      if (err.response?.status === 422 && Array.isArray(bloq) && bloq.length) {
+        const linhas = bloq.map(b => `  • ${b.aluno}: ${b.faltam.join(", ")}`).join("\n");
+        const msg = `${bloq.length} matrícula(s) com documentos obrigatórios em falta:\n\n${linhas}\n\nForçar a confirmação de TODAS as selecionadas mesmo assim?`;
+        if (!confirm(msg)) { setConfirmando(false); return; }
+        try {
+          const res2 = await enviar(true);
+          showToast(res2.data.message + " (forçada)");
+          if (res2.data.matriculas?.length) imprimirComprovativoMatricula(res2.data.matriculas, escola);
+          setSelected([]);
+          load();
+        } catch (e2) {
+          showToast(e2.response?.data?.message || "Erro ao forçar.", "error");
+        }
+      } else {
+        showToast(err.response?.data?.message || "Erro.", "error");
+      }
     } finally { setConfirmando(false); }
   };
 
@@ -312,6 +541,28 @@ export default function Matriculas() {
       load();
     } catch (err) {
       showToast(err.response?.data?.message || "Erro ao eliminar.", "error");
+    }
+  };
+
+  const handleCancelar = async (matricula) => {
+    if (!confirm(`Cancelar matrícula de ${matricula.aluno?.user?.nome}?`)) return;
+    try {
+      await api.patch(`/matriculas/${matricula.id}/cancelar`);
+      showToast("Matrícula cancelada.");
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.message || "Erro ao cancelar.", "error");
+    }
+  };
+
+  const handleReactivar = async (matricula) => {
+    if (!confirm(`Reactivar matrícula de ${matricula.aluno?.user?.nome}?\n\nVoltará a ficar pendente. Confirme depois para passar a activa.`)) return;
+    try {
+      await api.patch(`/matriculas/${matricula.id}/reactivar`);
+      showToast("Matrícula reactivada (pendente).");
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.message || "Erro ao reactivar.", "error");
     }
   };
 
@@ -439,6 +690,7 @@ export default function Matriculas() {
                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Aluno</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Nº</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Turma</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Classe</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Curso</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Data Mat.</th>
                 <th className="text-center px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Estado</th>
@@ -466,6 +718,7 @@ export default function Matriculas() {
                   </td>
                   <td className="px-5 py-3.5 text-slate-500 font-mono text-xs">{m.aluno?.numero_aluno}</td>
                   <td className="px-5 py-3.5 text-slate-700">{m.turma?.nome}</td>
+                  <td className="px-5 py-3.5 text-slate-600 text-xs">{m.turma?.classe?.nome || "—"}</td>
                   <td className="px-5 py-3.5 text-slate-500 text-xs">{m.turma?.classe?.curso?.nome || "—"}</td>
                   <td className="px-5 py-3.5 text-slate-500 text-xs">
                     {m.data_matricula ? new Date(m.data_matricula).toLocaleDateString("pt-AO") : "—"}
@@ -488,6 +741,33 @@ export default function Matriculas() {
                           className="text-xs font-semibold text-emerald-600 hover:text-emerald-800 transition-colors"
                         >
                           Confirmar
+                        </button>
+                      )}
+                      {(m.status === "pendente" || m.status === "activa") && (
+                        <>
+                          <button
+                            onClick={() => setTransferindo(m)}
+                            className="text-slate-300 hover:text-blue-600 transition-colors"
+                            title="Transferir"
+                          >
+                            <ArrowRightLeft size={15}/>
+                          </button>
+                          <button
+                            onClick={() => handleCancelar(m)}
+                            className="text-slate-300 hover:text-amber-600 transition-colors"
+                            title="Cancelar matrícula"
+                          >
+                            <Ban size={15}/>
+                          </button>
+                        </>
+                      )}
+                      {m.status === "cancelada" && (
+                        <button
+                          onClick={() => handleReactivar(m)}
+                          className="text-slate-300 hover:text-emerald-600 transition-colors"
+                          title="Reactivar matrícula"
+                        >
+                          <RotateCcw size={15}/>
                         </button>
                       )}
                       {m.status !== "activa" && (
@@ -555,6 +835,125 @@ export default function Matriculas() {
           }}
         />
       )}
+
+      {transferindo && (
+        <ModalTransferir
+          matricula={transferindo}
+          onClose={() => setTransferindo(null)}
+          onSaved={(msg) => {
+            setTransferindo(null);
+            showToast(msg);
+            load();
+          }}
+          onError={(msg) => showToast(msg, "error")}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── Modal: Transferir matrícula ─────────────────────────────── */
+function ModalTransferir({ matricula, onClose, onSaved, onError }) {
+  const [modo, setModo] = useState("interna"); // interna | externa
+  const [cursos,  setCursos]  = useState([]);
+  const [classes, setClasses] = useState([]);
+  const [turmas,  setTurmas]  = useState([]);
+  const [sel, setSel] = useState({ curso_id:"", classe_id:"", turma_id:"" });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.get("/cursos").then(r => setCursos(r.data.data || r.data)).catch(() => {});
+  }, []);
+  useEffect(() => {
+    setClasses([]); setTurmas([]); setSel(s => ({...s, classe_id:"", turma_id:""}));
+    if (!sel.curso_id) return;
+    api.get(`/classes?curso_id=${sel.curso_id}`).then(r => setClasses(r.data)).catch(() => {});
+  }, [sel.curso_id]);
+  useEffect(() => {
+    setTurmas([]); setSel(s => ({...s, turma_id:""}));
+    if (!sel.classe_id) return;
+    api.get(`/turmas?classe_id=${sel.classe_id}`).then(r => setTurmas(r.data)).catch(() => {});
+  }, [sel.classe_id]);
+
+  const submit = async () => {
+    setSaving(true);
+    try {
+      const payload = modo === "interna" ? { turma_destino_id: sel.turma_id } : {};
+      const res = await api.patch(`/matriculas/${matricula.id}/transferir`, payload);
+      onSaved(res.data.message);
+    } catch (err) {
+      onError(err.response?.data?.message || "Erro ao transferir.");
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl overflow-hidden">
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-800">Transferir matrícula</h2>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400"><X size={16}/></button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div className="text-sm text-slate-700">
+            Aluno: <strong>{matricula.aluno?.user?.nome}</strong><br/>
+            Turma actual: {matricula.turma?.nome} · {matricula.turma?.classe?.nome}
+          </div>
+
+          <div className="flex gap-2 bg-slate-100 rounded-xl p-1">
+            {[
+              { v:"interna", l:"Para outra turma (interna)" },
+              { v:"externa", l:"Para outra escola" },
+            ].map(o => (
+              <button key={o.v} onClick={() => setModo(o.v)}
+                className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors
+                  ${modo===o.v ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+                {o.l}
+              </button>
+            ))}
+          </div>
+
+          {modo === "interna" ? (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Curso *</label>
+                <select value={sel.curso_id} onChange={e => setSel(s => ({...s, curso_id: e.target.value}))} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50">
+                  <option value="">Seleccionar...</option>
+                  {cursos.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Classe *</label>
+                <select value={sel.classe_id} onChange={e => setSel(s => ({...s, classe_id: e.target.value}))} disabled={!sel.curso_id} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 disabled:opacity-50">
+                  <option value="">{sel.curso_id ? "Seleccionar..." : "← Curso primeiro"}</option>
+                  {classes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Turma destino *</label>
+                <select value={sel.turma_id} onChange={e => setSel(s => ({...s, turma_id: e.target.value}))} disabled={!sel.classe_id} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 disabled:opacity-50">
+                  <option value="">{sel.classe_id ? "Seleccionar..." : "← Classe primeiro"}</option>
+                  {turmas.filter(t => t.id !== matricula.turma?.id).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                </select>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+              Esta matrícula será marcada como <strong>transferida</strong>. O aluno deixará de constar como activo nesta turma.
+            </div>
+          )}
+        </div>
+
+        <div className="p-6 border-t border-slate-100 flex gap-3">
+          <button onClick={onClose} className="flex-1 border border-slate-200 text-slate-600 py-2.5 rounded-xl text-sm font-medium">Cancelar</button>
+          <button
+            onClick={submit}
+            disabled={saving || (modo==="interna" && !sel.turma_id)}
+            className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white py-2.5 rounded-xl text-sm font-medium">
+            {saving ? "A transferir..." : "Confirmar transferência"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

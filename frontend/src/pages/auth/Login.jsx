@@ -32,9 +32,11 @@ const TIPOS = [
   },
 ];
 
+const isGolfinho = window.location.hostname === "v2.grupogolfinho.com";
+
 export default function Login() {
   const [tipoSelecionado, setTipoSelecionado] = useState("aluno");
-  const [form, setForm] = useState({ escola_codigo: "golfinho", email: "", password: "" });
+  const [form, setForm] = useState({ escola_codigo: isGolfinho ? "golfinho" : "", identifier: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { setAuth } = useAuthStore();
@@ -50,7 +52,7 @@ export default function Login() {
     try {
       const { data } = await axios.post(
         `/api/tenant/auth/login?tenant=${form.escola_codigo}`,
-        { email: form.email, password: form.password }
+        { identifier: form.identifier, password: form.password }
       );
 
       if (!tipoConfig.tiposValidos.includes(data.user?.tipo)) {
@@ -97,7 +99,7 @@ export default function Login() {
                   <button
                     key={t.key}
                     type="button"
-                    onClick={() => { setTipoSelecionado(t.key); setError(""); }}
+                    onClick={() => { setTipoSelecionado(t.key); setError(""); setForm(f => ({ ...f, identifier: "" })); }}
                     className={`flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl border-2 text-center transition-all
                       ${active
                         ? "border-blue-600 bg-blue-50 text-blue-700"
@@ -126,20 +128,24 @@ export default function Login() {
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Código da Escola</label>
               <input
                 value={form.escola_codigo}
-                readOnly
+                readOnly={isGolfinho}
+                onChange={isGolfinho ? undefined : e => setForm({ ...form, escola_codigo: e.target.value })}
                 required
-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm bg-slate-100 text-slate-500 cursor-not-allowed"
+                placeholder={isGolfinho ? undefined : "Código da escola"}
+                className={`w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm ${isGolfinho ? "bg-slate-100 text-slate-500 cursor-not-allowed" : "focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"}`}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                {tipoSelecionado === "aluno" ? "Nº de Matrícula" : "Email"}
+              </label>
               <input
-                type="email"
+                type={tipoSelecionado === "aluno" ? "text" : "email"}
                 required
-                value={form.email}
-                onChange={e => setForm({ ...form, email: e.target.value })}
+                value={form.identifier}
+                onChange={e => setForm({ ...form, identifier: e.target.value })}
                 className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
-                placeholder="email@escola.ao"
+                placeholder={tipoSelecionado === "aluno" ? "Ex: 076556" : "email@escola.ao"}
               />
             </div>
             <div>
@@ -163,11 +169,23 @@ export default function Login() {
             </button>
           </form>
 
-          <div className="flex items-center justify-center text-sm text-slate-500 pt-1">
+          <div className="flex items-center justify-between text-sm text-slate-500 pt-1">
             <Link to="/recuperar-senha" className="text-blue-600 hover:underline text-xs">
               Esqueceu a senha?
             </Link>
+            <Link to="/downloads" className="text-blue-600 hover:underline text-xs flex items-center gap-1">
+              <span>⬇</span> Descarregar App
+            </Link>
           </div>
+
+          {!isGolfinho && (
+            <p className="text-center text-xs text-slate-500 pt-1">
+              Ainda não tem conta?{" "}
+              <Link to="/cadastro" className="text-blue-600 hover:underline font-medium">
+                Inscrever escola
+              </Link>
+            </p>
+          )}
 
           <p className="text-center text-xs text-slate-400 pt-1">
             {branding.name} © {new Date().getFullYear()} — Gestão Escolar Multi-Escola

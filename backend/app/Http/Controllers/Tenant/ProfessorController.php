@@ -5,6 +5,7 @@ use App\Models\Tenant\Professor;
 use App\Models\Tenant\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 class ProfessorController extends Controller {
     public function index(Request $request) {
         $query = Professor::with("user","disciplinas");
@@ -30,8 +31,17 @@ class ProfessorController extends Controller {
         return response()->json(["message"=>"Professor actualizado.","professor"=>$professor->load("user")]);
     }
     public function destroy(Professor $professor) {
+        if ($professor->foto) Storage::disk("public")->delete($professor->foto);
         $professor->user->delete();
         return response()->json(["message"=>"Professor removido."]);
+    }
+
+    public function uploadFoto(Request $request, Professor $professor) {
+        $request->validate(["foto" => "required|image|max:2048"]);
+        if ($professor->foto) Storage::disk("public")->delete($professor->foto);
+        $path = $request->file("foto")->store("fotos/professores", "public");
+        $professor->update(["foto" => $path]);
+        return response()->json(["foto_url" => "/storage/{$path}", "foto" => $path]);
     }
 
     public function resetSenha(Professor $professor) {

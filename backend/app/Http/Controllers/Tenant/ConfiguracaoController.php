@@ -8,7 +8,7 @@ class ConfiguracaoController extends Controller {
 
     public function escola(Request $request) {
         $escola = $request->attributes->get("escola");
-        return response()->json($escola->only(["id","nome","email","telefone","endereco","logo","codigo","plano"]));
+        return response()->json($escola->only(["id","nome","email","nif","telefone","endereco","logo","codigo","plano"]));
     }
 
     public function updateEscola(Request $request) {
@@ -16,11 +16,12 @@ class ConfiguracaoController extends Controller {
         $request->validate([
             "nome"     => "required|string|max:255",
             "email"    => "nullable|email|max:255",
+            "nif"      => "nullable|string|max:30",
             "telefone" => "nullable|string|max:50",
             "endereco" => "nullable|string|max:500",
         ]);
-        $escola->update($request->only(["nome","email","telefone","endereco"]));
-        return response()->json($escola->fresh()->only(["id","nome","email","telefone","endereco","logo","codigo","plano"]));
+        $escola->update($request->only(["nome","email","nif","telefone","endereco"]));
+        return response()->json($escola->fresh()->only(["id","nome","email","nif","telefone","endereco","logo","codigo","plano"]));
     }
 
     public function uploadLogo(Request $request) {

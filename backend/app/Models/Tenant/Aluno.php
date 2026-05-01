@@ -7,6 +7,8 @@ class Aluno extends Model {
     public function matriculas() { return $this->hasMany(Matricula::class); }
     public function notas() { return $this->hasMany(Nota::class); }
     public function pagamentos() { return $this->hasMany(Pagamento::class); }
+    public function documento() { return $this->hasOne(AlunoDocumento::class); }
+    public function entregasDocumentos() { return $this->hasMany(AlunoDocumentoEntrega::class); }
     public function turmaActual() {
         return $this->matriculas()->where("status","activa")->with("turma")->latest()->first()?->turma;
     }

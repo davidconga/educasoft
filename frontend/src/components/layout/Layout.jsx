@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, GraduationCap, LayoutGrid, FileText,
   Clock, Banknote, Video, Home, BookOpen, BookMarked,
   Tag, CreditCard, LogOut, Bell, Menu, ChevronRight, ClipboardList,
-  Building2, UserCog, CalendarCheck, UserCheck, Wallet, ShieldCheck, CalendarDays, ScrollText,
+  Building2, UserCog, CalendarCheck, UserCheck, Wallet, ShieldCheck, CalendarDays, ScrollText, BarChart3,
 } from "lucide-react";
 import { useAuthStore } from "../../store/auth";
 import { usePermissao } from "../../hooks/usePermissao";
@@ -22,7 +22,8 @@ const navGroups = [
     label: "Académico",
     items: [
       { href: "/alunos",                 label: "Alunos",                icon: Users,         modulo: "alunos"          },
-      { href: "/matriculas",             label: "Matrículas",            icon: ClipboardList, modulo: "matriculas"      },
+      { href: "/matriculas",             label: "Inscrições / Matrículas", icon: ClipboardList, modulo: "matriculas"      },
+      { href: "/matriculas/renovacao",   label: "Renovação de Matrículas", icon: ClipboardList, modulo: "matriculas"      },
       { href: "/professores",            label: "Professores",           icon: GraduationCap, modulo: "professores"     },
       { href: "/turmas",                 label: "Turmas",                icon: LayoutGrid,    modulo: "turmas"          },
       { href: "/notas",                  label: "Notas",                 icon: FileText,      modulo: "notas"           },
@@ -40,6 +41,8 @@ const navGroups = [
       { href: "/gestao-escolar",      label: "Classes & Salas",    icon: Home,       modulo: "gestao_escolar" },
       { href: "/cursos",              label: "Cursos",             icon: BookOpen,   modulo: "cursos"         },
       { href: "/disciplinas",         label: "Disciplinas",        icon: BookMarked, modulo: "disciplinas"    },
+      { href: "/regras-aproveitamento", label: "Regras Aproveitamento", icon: ShieldCheck, modulo: "configuracoes" },
+      { href: "/tipos-documento",       label: "Tipos de Documento", icon: BookMarked, modulo: "configuracoes" },
       { href: "/configuracao-escola", label: "Dados da Escola",    icon: Building2,  modulo: "configuracoes"  },
       { href: "/utilizadores",        label: "Utilizadores",       icon: UserCog,    modulo: "utilizadores"   },
       { href: "/permissoes",          label: "Permissões",         icon: ShieldCheck,modulo: "permissoes"     },
@@ -53,7 +56,8 @@ const navGroups = [
       { href: "/controlo-propinas",    label: "Controlo Propinas",    icon: Wallet,       modulo: "controlo_propinas" },
       { href: "/controlo-emolumentos", label: "Controlo Emolumentos", icon: ClipboardList, modulo: "pagamentos"  },
       { href: "/carteira-aluno",       label: "Carteira do Aluno",    icon: Wallet,        modulo: "pagamentos"  },
-      { href: "/relatorio-diario",  label: "Relatório Diário",   icon: CalendarDays, modulo: "tesouraria"     },
+      { href: "/relatorio-diario",     label: "Relatório Diário",     icon: CalendarDays, modulo: "tesouraria" },
+      { href: "/relatorio-financeiro", label: "Relatório Financeiro", icon: BarChart3,    modulo: "tesouraria" },
       { href: "/precario",          label: "Preçário",           icon: Tag,       modulo: "precario"          },
     ],
   },
@@ -196,7 +200,7 @@ export default function Layout({ children }) {
 
             <div className="w-px h-5 bg-slate-200" />
 
-            <div className="flex items-center gap-2.5">
+            <Link to="/perfil" className="flex items-center gap-2.5 hover:bg-slate-50 rounded-xl px-2 py-1 transition-colors" title="Meu perfil">
               <div className="text-right hidden sm:block">
                 <p className="text-sm font-semibold text-slate-700 leading-tight">{user?.nome}</p>
                 <p className="text-[11px] text-slate-400 capitalize">{user?.tipo}</p>
@@ -204,7 +208,7 @@ export default function Layout({ children }) {
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold shadow-sm shadow-violet-200">
                 {initials}
               </div>
-            </div>
+            </Link>
           </div>
         </header>
 

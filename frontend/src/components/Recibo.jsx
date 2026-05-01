@@ -6,10 +6,10 @@
  * Cada impresso tem duas cópias: Aluno + Escola
  */
 
-export function buildReciboHtml(pagamento, escola) {
+export function buildReciboHtml(pagamento, escola, carteira = null) {
   const lista = Array.isArray(pagamento) ? pagamento : [pagamento];
   const title = lista.length === 1 ? "Factura-Recibo" : "Recibo de Cobranças";
-  const body  = lista.length === 1 ? buildSingle(lista[0], escola) : buildConsolidado(lista, escola);
+  const body  = lista.length === 1 ? buildSingle(lista[0], escola, carteira) : buildConsolidado(lista, escola, carteira);
   return buildFormatWrapper(title, body);
 }
 
@@ -20,15 +20,39 @@ function openHtml(html) {
   if (win) win.addEventListener("load", () => URL.revokeObjectURL(url), { once: true });
 }
 
-export function imprimirRecibo(pagamento, escola) {
-  openHtml(buildReciboHtml(pagamento, escola));
+export function imprimirRecibo(pagamento, escola, carteira = null) {
+  openHtml(buildReciboHtml(pagamento, escola, carteira));
+}
+
+/* Bloco da carteira (aluno) — usado no recibo individual e consolidado. */
+function buildCarteiraBlock(c) {
+  if (!c) return "";
+  const fmtV = (v) => Number(v || 0).toLocaleString("pt-AO");
+  const saldo = (c.saldo ?? (Number(c.total_pago||0) - Number(c.total_pendente||0)));
+  const saldoCls = saldo >= 0 ? "color:#16a34a" : "color:#dc2626";
+  return `
+<div class="sec-title">Saldo da Carteira</div>
+<div class="aluno-box" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding-bottom:14px">
+  <div style="text-align:center">
+    <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em">Total Pago</div>
+    <div style="font-weight:700;color:#16a34a;font-size:13px;margin-top:2px">${fmtV(c.total_pago)} Kz</div>
+  </div>
+  <div style="text-align:center;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
+    <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em">Pendente</div>
+    <div style="font-weight:700;color:#d97706;font-size:13px;margin-top:2px">${fmtV(c.total_pendente)} Kz</div>
+  </div>
+  <div style="text-align:center">
+    <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em">Saldo</div>
+    <div style="font-weight:700;font-size:13px;margin-top:2px;${saldoCls}">${fmtV(saldo)} Kz</div>
+  </div>
+</div>`;
 }
 
 export function imprimirComprovativoMatricula(matricula, escola) {
   const lista = Array.isArray(matricula) ? matricula : [matricula];
   const title = lista.length === 1 ? "Comprovativo de Matrícula" : "Lista de Matrículas";
   const body  = lista.length === 1 ? buildComprovativoSingle(lista[0], escola) : buildComprovativoConsolidado(lista, escola);
-  openPrintWindow(title, body);
+  openHtml(buildFormatWrapper(title, body));
 }
 
 /* ─── janela de impressão com selector de formato ─────────────── */
@@ -250,7 +274,7 @@ function buildLogo(escola, nome) {
 /* ─── ticket compacto ─────────────────────────────────────────── */
 
 function buildTicketSingle(p, escola) {
-  const escolaNome = escola?.nome || "EduSoft";
+  const escolaNome = escola?.nome || "Educajá";
   const logoImg    = escola?.logo
     ? `<img src="${window.location.origin}/storage/${escola.logo}" style="height:30px;object-fit:contain;" onerror="this.style.display='none'"/><br/>`
     : "";
@@ -280,7 +304,7 @@ function buildTicketSingle(p, escola) {
 }
 
 function buildTicketConsolidado(pagamentos, escola) {
-  const escolaNome = escola?.nome || "EduSoft";
+  const escolaNome = escola?.nome || "Educajá";
   const logoImg    = escola?.logo
     ? `<img src="${window.location.origin}/storage/${escola.logo}" style="height:30px;object-fit:contain;" onerror="this.style.display='none'"/><br/>`
     : "";
@@ -304,7 +328,7 @@ function buildTicketConsolidado(pagamentos, escola) {
 }
 
 function buildTicketMatricula(m, escola) {
-  const escolaNome = escola?.nome || "EduSoft";
+  const escolaNome = escola?.nome || "Educajá";
   const logoImg    = escola?.logo
     ? `<img src="${window.location.origin}/storage/${escola.logo}" style="height:30px;object-fit:contain;" onerror="this.style.display='none'"/><br/>`
     : "";
@@ -330,8 +354,8 @@ function buildTicketMatricula(m, escola) {
 
 /* ─── recibo full card ────────────────────────────────────────── */
 
-function buildSingle(p, escola) {
-  const escolaNome = escola?.nome || "EduSoft";
+function buildSingle(p, escola, carteira = null) {
+  const escolaNome = escola?.nome || "Educajá";
   const aluno      = p.aluno?.user?.nome || "—";
   const numAluno   = p.aluno?.numero_aluno || "";
   const turma      = p.aluno?.matriculas?.[0]?.turma?.nome || "—";
@@ -380,16 +404,17 @@ ${buildTicketSingle(p, escola)}
       <td class="tf-valor">${fmt(p.valor)}</td>
     </tr></tfoot>
   </table>
+  ${buildCarteiraBlock(carteira)}
   <div class="assinaturas">
     <div class="ass-bloco"><div class="ass-linha"></div><div class="ass-label">Tesoureiro(a)</div></div>
     <div class="ass-bloco"><div class="ass-linha"></div><div class="ass-label">Encarregado de Educação / Aluno</div></div>
   </div>
-  <div class="rodape">Documento emitido electronicamente pelo sistema EduSoft &nbsp;·&nbsp; ${hoje}</div>
+  <div class="rodape">Documento emitido electronicamente pelo sistema Educajá &nbsp;·&nbsp; ${hoje}</div>
 </div>`;
 }
 
-function buildConsolidado(pagamentos, escola) {
-  const escolaNome = escola?.nome || "EduSoft";
+function buildConsolidado(pagamentos, escola, carteira = null) {
+  const escolaNome = escola?.nome || "Educajá";
   const total      = pagamentos.reduce((s, p) => s + Number(p.valor || 0), 0);
   const alunoIds   = [...new Set(pagamentos.map(p => p.aluno?.id).filter(Boolean))];
   const mesmAluno  = alunoIds.length === 1;
@@ -453,11 +478,12 @@ ${buildTicketConsolidado(pagamentos, escola)}
       <td class="tf-valor">${fmt(total)}</td>
     </tr></tfoot>
   </table>
+  ${buildCarteiraBlock(carteira)}
   <div class="assinaturas">
     <div class="ass-bloco"><div class="ass-linha"></div><div class="ass-label">Tesoureiro(a)</div></div>
     <div class="ass-bloco"><div class="ass-linha"></div><div class="ass-label">Encarregado de Educação / Aluno</div></div>
   </div>
-  <div class="rodape">Documento emitido electronicamente pelo sistema EduSoft &nbsp;·&nbsp; ${hoje}</div>
+  <div class="rodape">Documento emitido electronicamente pelo sistema Educajá &nbsp;·&nbsp; ${hoje}</div>
 </div>`;
 }
 
@@ -469,7 +495,7 @@ const statusMatLabel = {
 };
 
 function buildComprovativoSingle(m, escola) {
-  const escolaNome = escola?.nome || "EduSoft";
+  const escolaNome = escola?.nome || "Educajá";
   const aluno      = m.aluno?.user?.nome || "—";
   const numAluno   = m.aluno?.numero_aluno || "—";
   const turma      = m.turma?.nome || "—";
@@ -519,12 +545,12 @@ ${buildTicketMatricula(m, escola)}
     <div class="ass-bloco"><div class="ass-linha"></div><div class="ass-label">Director(a) / Secretaria</div></div>
     <div class="ass-bloco"><div class="ass-linha"></div><div class="ass-label">Encarregado de Educação / Aluno</div></div>
   </div>
-  <div class="rodape">Documento emitido electronicamente pelo sistema EduSoft &nbsp;·&nbsp; ${hoje}</div>
+  <div class="rodape">Documento emitido electronicamente pelo sistema Educajá &nbsp;·&nbsp; ${hoje}</div>
 </div>`;
 }
 
 function buildComprovativoConsolidado(matriculas, escola) {
-  const escolaNome = escola?.nome || "EduSoft";
+  const escolaNome = escola?.nome || "Educajá";
 
   const linhas = matriculas.map(m => `
     <tr>
@@ -573,6 +599,6 @@ function buildComprovativoConsolidado(matriculas, escola) {
     <div class="ass-bloco"><div class="ass-linha"></div><div class="ass-label">Director(a) / Secretaria</div></div>
     <div class="ass-bloco"><div class="ass-linha"></div><div class="ass-label">Encarregado de Educação</div></div>
   </div>
-  <div class="rodape">Documento emitido electronicamente pelo sistema EduSoft &nbsp;·&nbsp; ${hoje}</div>
+  <div class="rodape">Documento emitido electronicamente pelo sistema Educajá &nbsp;·&nbsp; ${hoje}</div>
 </div>`;
 }

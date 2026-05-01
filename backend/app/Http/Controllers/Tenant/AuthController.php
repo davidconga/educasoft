@@ -7,9 +7,18 @@ use Illuminate\Support\Facades\DB;
 
 class AuthController extends Controller {
     public function login(Request $request) {
-        $request->validate(["email"=>"required|email","password"=>"required"]);
+        $request->validate(["identifier"=>"required|string","password"=>"required"]);
 
-        $userRaw = DB::connection("tenant")->table("users")->where("email", $request->email)->first();
+        $identifier = trim($request->identifier);
+
+        if (str_contains($identifier, '@')) {
+            $userRaw = DB::connection("tenant")->table("users")->where("email", $identifier)->first();
+        } else {
+            $aluno = DB::connection("tenant")->table("alunos")->where("numero_aluno", $identifier)->first();
+            $userRaw = $aluno
+                ? DB::connection("tenant")->table("users")->where("id", $aluno->user_id)->first()
+                : null;
+        }
 
         if (!$userRaw || !Hash::check($request->password, $userRaw->password)) {
             return response()->json(["message"=>"Credenciais inválidas."], 401);

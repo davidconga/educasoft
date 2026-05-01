@@ -13,7 +13,6 @@ const Icon = {
   filter:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-4 h-4"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>,
 };
 
-const CLASSES = ["1ª","2ª","3ª","4ª","5ª","6ª","7ª","8ª","9ª","10ª","11ª","12ª"].map(c => `${c} Classe`);
 const CATEGORIAS_EMOL = ["Secretaria","Exames","Certidões","Matrícula","Inscrição","Uniforme","Outros"];
 const ANOS_LETIVOS = Array.from({ length: 6 }, (_, i) => {
   const y = new Date().getFullYear() - 2 + i;
@@ -69,7 +68,10 @@ function EmptyState({ msg }) {
 }
 
 /* ── barra de contexto (âmbito) ────────────────────────────── */
-function BarraAmbito({ ambito, setAmbito, cursos }) {
+function BarraAmbito({ ambito, setAmbito, cursos, classes }) {
+  const classesFiltradas = ambito.curso_id
+    ? classes.filter(c => String(c.curso_id) === String(ambito.curso_id))
+    : classes;
   return (
     <div className="flex flex-wrap items-center gap-3 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 mb-6">
       <div className="flex items-center gap-2 text-slate-500 text-sm font-medium shrink-0">
@@ -96,7 +98,7 @@ function BarraAmbito({ ambito, setAmbito, cursos }) {
         <label className="text-xs font-medium text-slate-500 shrink-0">Curso</label>
         <select
           value={ambito.curso_id}
-          onChange={e => setAmbito(a => ({ ...a, curso_id: e.target.value }))}
+          onChange={e => setAmbito(a => ({ ...a, curso_id: e.target.value, nivel: "" }))}
           className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700"
         >
           <option value="">Todos</option>
@@ -104,16 +106,17 @@ function BarraAmbito({ ambito, setAmbito, cursos }) {
         </select>
       </div>
 
-      {/* Classe */}
+      {/* Classe (filtrada pelo curso) */}
       <div className="flex items-center gap-2">
         <label className="text-xs font-medium text-slate-500 shrink-0">Classe</label>
         <select
           value={ambito.nivel}
           onChange={e => setAmbito(a => ({ ...a, nivel: e.target.value }))}
-          className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700"
+          disabled={!ambito.curso_id}
+          className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 disabled:opacity-50"
         >
-          <option value="">Todas</option>
-          {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+          <option value="">{ambito.curso_id ? "Todas" : "← Curso primeiro"}</option>
+          {classesFiltradas.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
         </select>
       </div>
 
@@ -144,8 +147,37 @@ function BadgeAmbito({ item, cursos }) {
   );
 }
 
+/* agrupa items por nivel, respeitando a ordem das classes */
+function gruposPorClasse(items, classes) {
+  const ordem = classes.map(c => c.nome);
+  const mapa  = {};
+  for (const it of items) {
+    const chave = it.nivel || "";
+    if (!mapa[chave]) mapa[chave] = [];
+    mapa[chave].push(it);
+  }
+  const grupos = [];
+  for (const nome of ordem) {
+    if (mapa[nome]) grupos.push({ nome, items: mapa[nome] });
+  }
+  if (mapa[""]) grupos.push({ nome: "", items: mapa[""] });
+  return grupos;
+}
+
+function GrupoHeader({ nome }) {
+  return (
+    <div className="flex items-center gap-3 mt-2 mb-3">
+      <span className="text-sm font-semibold text-slate-700">{nome || "Global"}</span>
+      <div className="flex-1 h-px bg-slate-100" />
+    </div>
+  );
+}
+
 /* campo de âmbito dentro do formulário */
-function CamposAmbito({ form, setForm, cursos, required }) {
+function CamposAmbito({ form, setForm, cursos, classes, required }) {
+  const classesFiltradas = form.curso_id
+    ? classes.filter(c => String(c.curso_id) === String(form.curso_id))
+    : classes;
   return (
     <div className="bg-slate-50 rounded-xl p-4 space-y-3 border border-slate-200">
       <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Âmbito de aplicação</p>
@@ -162,15 +194,15 @@ function CamposAmbito({ form, setForm, cursos, required }) {
           </select>
         </Field>
         <Field label="Curso">
-          <select value={form.curso_id || ""} onChange={e => setForm(f => ({ ...f, curso_id: e.target.value }))} className={inp}>
+          <select value={form.curso_id || ""} onChange={e => setForm(f => ({ ...f, curso_id: e.target.value, nivel: "" }))} className={inp}>
             <option value="">Todos</option>
             {cursos.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
           </select>
         </Field>
         <Field label="Classe">
-          <select value={form.nivel || ""} onChange={e => setForm(f => ({ ...f, nivel: e.target.value }))} className={inp}>
-            <option value="">Todas</option>
-            {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+          <select value={form.nivel || ""} onChange={e => setForm(f => ({ ...f, nivel: e.target.value }))} disabled={!form.curso_id} className={`${inp} disabled:opacity-50`}>
+            <option value="">{form.curso_id ? "Todas" : "← Curso primeiro"}</option>
+            {classesFiltradas.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
           </select>
         </Field>
       </div>
@@ -182,7 +214,7 @@ function CamposAmbito({ form, setForm, cursos, required }) {
 /* ══════════════════════════════════════════════════════════════
    PROPINAS
 ══════════════════════════════════════════════════════════════ */
-function SeccaoPropinas({ cursos }) {
+function SeccaoPropinas({ cursos, classes }) {
   const [items, setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [ambito, setAmbito] = useState({ ano_letivo: "", curso_id: "", nivel: "" });
@@ -226,7 +258,7 @@ function SeccaoPropinas({ cursos }) {
 
   return (
     <>
-      <BarraAmbito ambito={ambito} setAmbito={setAmbito} cursos={cursos} />
+      <BarraAmbito ambito={ambito} setAmbito={setAmbito} cursos={cursos} classes={classes} />
 
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-slate-500">{items.length} registo(s)</p>
@@ -240,26 +272,33 @@ function SeccaoPropinas({ cursos }) {
       ) : items.length === 0 ? (
         <EmptyState msg="Nenhuma propina configurada para este âmbito." />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {items.map(it => (
-            <div key={it.id} className="bg-white rounded-2xl border border-slate-100 p-5 hover:shadow-md transition-all">
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <h3 className="font-semibold text-slate-800">{it.nome || it.nivel || "Propina"}</h3>
-                  {it.turno && <p className="text-xs text-slate-400 capitalize mt-0.5">{it.turno}</p>}
-                </div>
-                <BadgeAmbito item={it} cursos={cursos} />
-              </div>
-              {it.descricao && <p className="text-xs text-slate-500 mb-3">{it.descricao}</p>}
-              <div className="border-t border-slate-100 pt-3 flex items-center justify-between mt-3">
-                <div>
-                  <p className="text-xs text-slate-400">Valor Mensal</p>
-                  <p className="text-xl font-bold text-slate-800">{fmt(it.valor_mensal)} <span className="text-xs font-normal text-slate-400">Kz</span></p>
-                </div>
-                <div className="flex gap-1">
-                  <button onClick={() => openEdit(it)} className="w-8 h-8 rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-600 flex items-center justify-center transition-colors">{Icon.edit}</button>
-                  <button onClick={() => remove(it.id)} className="w-8 h-8 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 flex items-center justify-center transition-colors">{Icon.trash}</button>
-                </div>
+        <div className="space-y-2">
+          {gruposPorClasse(items, classes).map(({ nome, items: grupo }) => (
+            <div key={nome || "__global__"}>
+              <GrupoHeader nome={nome} />
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {grupo.map(it => (
+                  <div key={it.id} className="bg-white rounded-2xl border border-slate-100 p-5 hover:shadow-md transition-all">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <h3 className="font-semibold text-slate-800">{it.nome || it.nivel || "Propina"}</h3>
+                        {it.turno && <p className="text-xs text-slate-400 capitalize mt-0.5">{it.turno}</p>}
+                      </div>
+                      <BadgeAmbito item={it} cursos={cursos} />
+                    </div>
+                    {it.descricao && <p className="text-xs text-slate-500 mb-3">{it.descricao}</p>}
+                    <div className="border-t border-slate-100 pt-3 flex items-center justify-between mt-3">
+                      <div>
+                        <p className="text-xs text-slate-400">Valor Mensal</p>
+                        <p className="text-xl font-bold text-slate-800">{fmt(it.valor_mensal)} <span className="text-xs font-normal text-slate-400">Kz</span></p>
+                      </div>
+                      <div className="flex gap-1">
+                        <button onClick={() => openEdit(it)} className="w-8 h-8 rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-600 flex items-center justify-center transition-colors">{Icon.edit}</button>
+                        <button onClick={() => remove(it.id)} className="w-8 h-8 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 flex items-center justify-center transition-colors">{Icon.trash}</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           ))}
@@ -286,7 +325,7 @@ function SeccaoPropinas({ cursos }) {
                 <input type="number" required min="0" value={form.valor_mensal} onChange={e => setForm(f => ({ ...f, valor_mensal: e.target.value }))} placeholder="0" className={inp} />
               </Field>
             </div>
-            <CamposAmbito form={form} setForm={setForm} cursos={cursos} required={false} />
+            <CamposAmbito form={form} setForm={setForm} cursos={cursos} classes={classes} required={false} />
             <Field label="Observações">
               <input value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} placeholder="Ex: Inclui material didáctico" className={inp} />
             </Field>
@@ -306,7 +345,7 @@ function SeccaoPropinas({ cursos }) {
 /* ══════════════════════════════════════════════════════════════
    EMOLUMENTOS
 ══════════════════════════════════════════════════════════════ */
-function SeccaoEmolumentos({ cursos }) {
+function SeccaoEmolumentos({ cursos, classes }) {
   const [items, setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [ambito, setAmbito] = useState({ ano_letivo: "", curso_id: "", nivel: "" });
@@ -350,7 +389,7 @@ function SeccaoEmolumentos({ cursos }) {
 
   return (
     <>
-      <BarraAmbito ambito={ambito} setAmbito={setAmbito} cursos={cursos} />
+      <BarraAmbito ambito={ambito} setAmbito={setAmbito} cursos={cursos} classes={classes} />
 
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-slate-500">{items.length} emolumento(s)</p>
@@ -364,43 +403,50 @@ function SeccaoEmolumentos({ cursos }) {
       ) : items.length === 0 ? (
         <EmptyState msg="Nenhum emolumento configurado para este âmbito." />
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100">
-                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Nome</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Categoria</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Âmbito</th>
-                <th className="text-center px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Obrigatório</th>
-                <th className="text-right px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Valor</th>
-                <th className="px-5 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {items.map(it => (
-                <tr key={it.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-5 py-3.5">
-                    <p className="font-medium text-slate-800">{it.nome}</p>
-                    {it.descricao && <p className="text-xs text-slate-400 truncate max-w-xs">{it.descricao}</p>}
-                  </td>
-                  <td className="px-5 py-3.5"><span className="bg-violet-50 text-violet-700 text-xs px-2.5 py-1 rounded-full font-medium">{it.categoria}</span></td>
-                  <td className="px-5 py-3.5"><BadgeAmbito item={it} cursos={cursos} /></td>
-                  <td className="px-5 py-3.5 text-center">
-                    {it.obrigatorio
-                      ? <span className="bg-emerald-50 text-emerald-700 text-xs px-2 py-0.5 rounded-full font-medium">Sim</span>
-                      : <span className="bg-slate-100 text-slate-400 text-xs px-2 py-0.5 rounded-full">Não</span>}
-                  </td>
-                  <td className="px-5 py-3.5 text-right font-semibold text-slate-800">{fmt(it.valor)} Kz</td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex justify-end gap-1">
-                      <button onClick={() => openEdit(it)} className="w-8 h-8 rounded-lg hover:bg-violet-50 text-slate-400 hover:text-violet-600 flex items-center justify-center transition-colors">{Icon.edit}</button>
-                      <button onClick={() => remove(it.id)} className="w-8 h-8 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 flex items-center justify-center transition-colors">{Icon.trash}</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-2">
+          {gruposPorClasse(items, classes).map(({ nome, items: grupo }) => (
+            <div key={nome || "__global__"}>
+              <GrupoHeader nome={nome} />
+              <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Nome</th>
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Categoria</th>
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Âmbito</th>
+                      <th className="text-center px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Obrigatório</th>
+                      <th className="text-right px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Valor</th>
+                      <th className="px-5 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {grupo.map(it => (
+                      <tr key={it.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-5 py-3.5">
+                          <p className="font-medium text-slate-800">{it.nome}</p>
+                          {it.descricao && <p className="text-xs text-slate-400 truncate max-w-xs">{it.descricao}</p>}
+                        </td>
+                        <td className="px-5 py-3.5"><span className="bg-violet-50 text-violet-700 text-xs px-2.5 py-1 rounded-full font-medium">{it.categoria}</span></td>
+                        <td className="px-5 py-3.5"><BadgeAmbito item={it} cursos={cursos} /></td>
+                        <td className="px-5 py-3.5 text-center">
+                          {it.obrigatorio
+                            ? <span className="bg-emerald-50 text-emerald-700 text-xs px-2 py-0.5 rounded-full font-medium">Sim</span>
+                            : <span className="bg-slate-100 text-slate-400 text-xs px-2 py-0.5 rounded-full">Não</span>}
+                        </td>
+                        <td className="px-5 py-3.5 text-right font-semibold text-slate-800">{fmt(it.valor)} Kz</td>
+                        <td className="px-5 py-3.5">
+                          <div className="flex justify-end gap-1">
+                            <button onClick={() => openEdit(it)} className="w-8 h-8 rounded-lg hover:bg-violet-50 text-slate-400 hover:text-violet-600 flex items-center justify-center transition-colors">{Icon.edit}</button>
+                            <button onClick={() => remove(it.id)} className="w-8 h-8 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 flex items-center justify-center transition-colors">{Icon.trash}</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -424,7 +470,7 @@ function SeccaoEmolumentos({ cursos }) {
             <Field label="Descrição">
               <textarea rows={2} value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} placeholder="Breve descrição do serviço..." className={`${inp} resize-none`} />
             </Field>
-            <CamposAmbito form={form} setForm={setForm} cursos={cursos} />
+            <CamposAmbito form={form} setForm={setForm} cursos={cursos} classes={classes} />
             <label className="flex items-center gap-3 cursor-pointer select-none">
               <Toggle checked={form.obrigatorio} onChange={v => setForm(f => ({ ...f, obrigatorio: v }))} color="violet" />
               <span className="text-sm text-slate-600">Cobrança obrigatória na matrícula</span>
@@ -445,7 +491,7 @@ function SeccaoEmolumentos({ cursos }) {
 /* ══════════════════════════════════════════════════════════════
    MULTAS
 ══════════════════════════════════════════════════════════════ */
-function SeccaoMultas({ cursos }) {
+function SeccaoMultas({ cursos, classes }) {
   const [items, setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [ambito, setAmbito] = useState({ ano_letivo: "", curso_id: "", nivel: "" });
@@ -494,7 +540,7 @@ function SeccaoMultas({ cursos }) {
 
   return (
     <>
-      <BarraAmbito ambito={ambito} setAmbito={setAmbito} cursos={cursos} />
+      <BarraAmbito ambito={ambito} setAmbito={setAmbito} cursos={cursos} classes={classes} />
 
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-slate-500">{items.length} regra(s)</p>
@@ -508,40 +554,47 @@ function SeccaoMultas({ cursos }) {
       ) : items.length === 0 ? (
         <EmptyState msg="Nenhuma regra de multa configurada para este âmbito." />
       ) : (
-        <div className="space-y-3">
-          {items.map(it => (
-            <div key={it.id} className={`bg-white rounded-2xl border border-slate-100 p-5 transition-all ${!it.ativo ? "opacity-60" : ""}`}>
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex flex-wrap items-center gap-2 mb-2">
-                    <h3 className="font-semibold text-slate-800">{it.nome}</h3>
-                    <BadgeAmbito item={it} cursos={cursos} />
-                    <span className="text-xs bg-rose-50 text-rose-600 px-2 py-0.5 rounded-full capitalize">{it.aplicar_em}</span>
-                    {!it.ativo && <span className="text-xs bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full">Inactiva</span>}
+        <div className="space-y-2">
+          {gruposPorClasse(items, classes).map(({ nome, items: grupo }) => (
+            <div key={nome || "__global__"}>
+              <GrupoHeader nome={nome} />
+              <div className="space-y-3">
+                {grupo.map(it => (
+                  <div key={it.id} className={`bg-white rounded-2xl border border-slate-100 p-5 transition-all ${!it.ativo ? "opacity-60" : ""}`}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <h3 className="font-semibold text-slate-800">{it.nome}</h3>
+                          <BadgeAmbito item={it} cursos={cursos} />
+                          <span className="text-xs bg-rose-50 text-rose-600 px-2 py-0.5 rounded-full capitalize">{it.aplicar_em}</span>
+                          {!it.ativo && <span className="text-xs bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full">Inactiva</span>}
+                        </div>
+                        {it.descricao && <p className="text-xs text-slate-500 mb-3">{it.descricao}</p>}
+                        <div className="flex flex-wrap gap-5">
+                          <div>
+                            <p className="text-xs text-slate-400">Cálculo</p>
+                            <p className="text-sm font-medium text-slate-700">{it.tipo_calculo === "percentagem" ? "Percentagem" : "Valor fixo"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-400">Valor</p>
+                            <p className="text-sm font-bold text-rose-600">{it.tipo_calculo === "percentagem" ? `${it.valor}%` : `${fmt(it.valor)} Kz`}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-400">Carência</p>
+                            <p className="text-sm font-medium text-slate-700">{it.dias_carencia} dia(s)</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button onClick={() => toggleAtivo(it)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${it.ativo ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
+                          {it.ativo ? "Activa" : "Inactiva"}
+                        </button>
+                        <button onClick={() => openEdit(it)} className="w-8 h-8 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 flex items-center justify-center transition-colors">{Icon.edit}</button>
+                        <button onClick={() => remove(it.id)} className="w-8 h-8 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 flex items-center justify-center transition-colors">{Icon.trash}</button>
+                      </div>
+                    </div>
                   </div>
-                  {it.descricao && <p className="text-xs text-slate-500 mb-3">{it.descricao}</p>}
-                  <div className="flex flex-wrap gap-5">
-                    <div>
-                      <p className="text-xs text-slate-400">Cálculo</p>
-                      <p className="text-sm font-medium text-slate-700">{it.tipo_calculo === "percentagem" ? "Percentagem" : "Valor fixo"}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-400">Valor</p>
-                      <p className="text-sm font-bold text-rose-600">{it.tipo_calculo === "percentagem" ? `${it.valor}%` : `${fmt(it.valor)} Kz`}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-400">Carência</p>
-                      <p className="text-sm font-medium text-slate-700">{it.dias_carencia} dia(s)</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => toggleAtivo(it)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${it.ativo ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
-                    {it.ativo ? "Activa" : "Inactiva"}
-                  </button>
-                  <button onClick={() => openEdit(it)} className="w-8 h-8 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 flex items-center justify-center transition-colors">{Icon.edit}</button>
-                  <button onClick={() => remove(it.id)} className="w-8 h-8 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 flex items-center justify-center transition-colors">{Icon.trash}</button>
-                </div>
+                ))}
               </div>
             </div>
           ))}
@@ -591,7 +644,7 @@ function SeccaoMultas({ cursos }) {
             <Field label="Descrição">
               <textarea rows={2} value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} placeholder="Ex: Aplicada ao fim de cada mês em atraso" className={`${inp} resize-none`} />
             </Field>
-            <CamposAmbito form={form} setForm={setForm} cursos={cursos} />
+            <CamposAmbito form={form} setForm={setForm} cursos={cursos} classes={classes} />
             <label className="flex items-center gap-3 cursor-pointer select-none">
               <Toggle checked={form.ativo} onChange={v => setForm(f => ({ ...f, ativo: v }))} color="rose" />
               <span className="text-sm text-slate-600">Regra activa</span>
@@ -640,11 +693,13 @@ const clrTab = {
    PÁGINA PRINCIPAL
 ══════════════════════════════════════════════════════════════ */
 export default function Precario() {
-  const [tab, setTab]       = useState("propinas");
-  const [cursos, setCursos] = useState([]);
+  const [tab, setTab]         = useState("propinas");
+  const [cursos, setCursos]   = useState([]);
+  const [classes, setClasses] = useState([]);
 
   useEffect(() => {
     api.get("/cursos").then(r => setCursos(r.data.data || r.data)).catch(() => {});
+    api.get("/classes").then(r => setClasses(r.data)).catch(() => {});
   }, []);
 
   const active = TABS.find(t => t.id === tab);
@@ -670,9 +725,9 @@ export default function Precario() {
         ))}
       </div>
 
-      {tab === "propinas"    && <SeccaoPropinas    cursos={cursos} />}
-      {tab === "emolumentos" && <SeccaoEmolumentos cursos={cursos} />}
-      {tab === "multas"      && <SeccaoMultas      cursos={cursos} />}
+      {tab === "propinas"    && <SeccaoPropinas    cursos={cursos} classes={classes} />}
+      {tab === "emolumentos" && <SeccaoEmolumentos cursos={cursos} classes={classes} />}
+      {tab === "multas"      && <SeccaoMultas      cursos={cursos} classes={classes} />}
     </div>
   );
 }

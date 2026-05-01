@@ -19,7 +19,7 @@ export default function SuperAdminLayout() {
         <div className="px-5 py-5 border-b border-gray-700">
           <div className="flex items-center gap-2 mb-0.5">
             <span className="text-xl">⚙️</span>
-            <span className="font-bold text-base">EduSoft</span>
+            <span className="font-bold text-base">Educajá</span>
           </div>
           <p className="text-xs text-gray-400 ml-7">Super-Admin</p>
         </div>

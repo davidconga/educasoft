@@ -13,7 +13,7 @@ function PautaTrimestral({ data, periodo, anoLetivo, escolaNome, logoUrl }) {
     <>
       <div className="text-center mb-3 border-b border-slate-300 pb-3">
         {logoUrl && <img src={logoUrl} alt="" className="h-12 object-contain mx-auto mb-1" onError={e => { e.target.style.display = "none"; }} />}
-        <h1 className="text-sm font-bold uppercase">{escolaNome ?? "EduSoft"}</h1>
+        <h1 className="text-sm font-bold uppercase">{escolaNome ?? "Educajá"}</h1>
         <h2 className="text-sm font-bold uppercase mt-0.5">Pauta de Aproveitamento — {periodoLabel}</h2>
         <div className="flex flex-wrap justify-center gap-4 mt-1 text-[9px] text-slate-600">
           <span><strong>Curso:</strong> {data.turma.curso ?? "—"}</span>
@@ -122,7 +122,7 @@ function PautaAnual({ data, anoLetivo, escolaNome, logoUrl }) {
     <>
       <div className="text-center mb-3 border-b border-slate-300 pb-3">
         {logoUrl && <img src={logoUrl} alt="" className="h-12 object-contain mx-auto mb-1" onError={e => { e.target.style.display = "none"; }} />}
-        <h1 className="text-sm font-bold uppercase">{escolaNome ?? "EduSoft"}</h1>
+        <h1 className="text-sm font-bold uppercase">{escolaNome ?? "Educajá"}</h1>
         <h2 className="text-sm font-bold uppercase mt-0.5">Pauta de Aproveitamento Anual</h2>
         <div className="flex flex-wrap justify-center gap-4 mt-1 text-[9px] text-slate-600">
           <span><strong>Curso:</strong> {data.turma.curso ?? "—"}</span>

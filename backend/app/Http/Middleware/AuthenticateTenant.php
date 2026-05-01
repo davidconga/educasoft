@@ -1,6 +1,7 @@
 <?php
 namespace App\Http\Middleware;
 
+use App\Models\Tenant\User;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -33,11 +34,8 @@ class AuthenticateTenant
             return response()->json(["message" => "Unauthenticated."], 401);
         }
 
-        // Load the user
-        $user = DB::connection("tenant")
-            ->table("users")
-            ->where("id", $pat->tokenable_id)
-            ->first();
+        // Load the user (Eloquent model — supports ->update(), relations, etc.)
+        $user = User::on("tenant")->find($pat->tokenable_id);
 
         if (!$user || !$user->ativo) {
             return response()->json(["message" => "Unauthenticated."], 401);

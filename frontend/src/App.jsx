@@ -27,6 +27,10 @@ import GestaoEscolar from "./pages/admin/GestaoEscolar";
 import Disciplinas from "./pages/admin/Disciplinas";
 import AlunoDetalhe from "./pages/admin/AlunoDetalhe";
 import Matriculas from "./pages/admin/Matriculas";
+import RenovacaoMatriculas from "./pages/admin/RenovacaoMatriculas";
+import RegrasAproveitamento from "./pages/admin/RegrasAproveitamento";
+import TiposDocumento from "./pages/admin/TiposDocumento";
+import Perfil from "./pages/Perfil";
 import PautaImpressao from "./pages/admin/PautaImpressao";
 import Presencas from "./pages/admin/Presencas";
 import PresencasProfessores from "./pages/admin/PresencasProfessores";
@@ -38,9 +42,11 @@ import GestaoPermissoes from "./pages/admin/GestaoPermissoes";
 import CartaoEstudante from "./pages/admin/CartaoEstudante";
 import ControloEmolumentos from "./pages/admin/ControloEmolumentos";
 import PerfilAluno from "./pages/public/PerfilAluno";
+import Downloads from "./pages/public/Downloads";
 import VerificarProva from "./pages/public/VerificarProva";
 import CarteiraAluno from "./pages/admin/CarteiraAluno";
 import RelatorioDiario from "./pages/admin/RelatorioDiario";
+import RelatorioFinanceiro from "./pages/admin/RelatorioFinanceiro";
 import FolhaProva from "./pages/admin/FolhaProva";
 import PortalLayout from "./pages/portal/PortalLayout";
 import PortalInicio from "./pages/portal/PortalInicio";
@@ -104,6 +110,9 @@ function AppRoutes() {
       {/* Perfil público do aluno (via QR) */}
       <Route path="/p/:escola/:numero" element={<PerfilAluno />} />
 
+      {/* Downloads das apps */}
+      <Route path="/downloads" element={<Downloads />} />
+
       {/* Verificação pública de folha de prova */}
       <Route path="/verificar-prova/:codigo" element={<VerificarProva />} />
 
@@ -140,6 +149,10 @@ function AppRoutes() {
       <Route path="/alunos" element={<ProtectedRoute><Layout><Alunos /></Layout></ProtectedRoute>} />
       <Route path="/alunos/:id" element={<ProtectedRoute><Layout><AlunoDetalhe /></Layout></ProtectedRoute>} />
       <Route path="/matriculas" element={<ProtectedRoute><Layout><Matriculas /></Layout></ProtectedRoute>} />
+      <Route path="/matriculas/renovacao" element={<ProtectedRoute><Layout><RenovacaoMatriculas /></Layout></ProtectedRoute>} />
+      <Route path="/regras-aproveitamento" element={<ProtectedRoute><Layout><RegrasAproveitamento /></Layout></ProtectedRoute>} />
+      <Route path="/tipos-documento" element={<ProtectedRoute><Layout><TiposDocumento /></Layout></ProtectedRoute>} />
+      <Route path="/perfil" element={<ProtectedRoute><Layout><Perfil /></Layout></ProtectedRoute>} />
       <Route path="/professores" element={<ProtectedRoute><Layout><Professores /></Layout></ProtectedRoute>} />
       <Route path="/professores/:id" element={<ProtectedRoute><Layout><ProfessorDetalhe /></Layout></ProtectedRoute>} />
       <Route path="/turmas" element={<ProtectedRoute><Layout><Turmas /></Layout></ProtectedRoute>} />
@@ -163,7 +176,8 @@ function AppRoutes() {
       <Route path="/cartao-estudante" element={<ProtectedRoute><Layout><CartaoEstudante /></Layout></ProtectedRoute>} />
       <Route path="/controlo-emolumentos" element={<ProtectedRoute><Layout><ControloEmolumentos /></Layout></ProtectedRoute>} />
       <Route path="/carteira-aluno"       element={<ProtectedRoute><Layout><CarteiraAluno /></Layout></ProtectedRoute>} />
-      <Route path="/relatorio-diario"     element={<ProtectedRoute><Layout><RelatorioDiario /></Layout></ProtectedRoute>} />
+      <Route path="/relatorio-diario"      element={<ProtectedRoute><Layout><RelatorioDiario /></Layout></ProtectedRoute>} />
+      <Route path="/relatorio-financeiro" element={<ProtectedRoute><Layout><RelatorioFinanceiro /></Layout></ProtectedRoute>} />
       <Route path="/folha-prova"          element={<ProtectedRoute><Layout><FolhaProva /></Layout></ProtectedRoute>} />
       <Route path="*" element={<Navigate to={loginRedirect ?? "/login"} replace />} />
     </Routes>

@@ -39,7 +39,7 @@ function buildHorarioHtml(horarios, titulo, subtitulo, escola, modoLabel) {
   // Dias que têm pelo menos 1 aula
   const diasAtivos = DIAS.filter(d => hs.some(h => h._dia === d));
 
-  const escolaNome = escola?.nome ?? "EduSoft";
+  const escolaNome = escola?.nome ?? "Educajá";
   const logoPath   = escola?.logo ? `/storage/${escola.logo}` : null;
   const hoje       = new Date().toLocaleDateString("pt-AO",{day:"2-digit",month:"long",year:"numeric"});
 
@@ -119,7 +119,7 @@ function buildHorarioHtml(horarios, titulo, subtitulo, escola, modoLabel) {
   <!-- Rodapé -->
   <div style="margin-top:30px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#aaa;">
     <span>${escolaNome}</span>
-    <span>Gerado automaticamente por EduSoft</span>
+    <span>Gerado automaticamente por Educajá</span>
   </div>
 
   <script>window.onload=()=>{window.print();}</script>

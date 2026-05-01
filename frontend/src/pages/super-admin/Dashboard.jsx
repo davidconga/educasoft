@@ -41,7 +41,7 @@ export default function SuperAdminDashboard() {
     <div className="p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
-        <p className="text-gray-500 text-sm mt-0.5">Visão geral da plataforma EduSoft</p>
+        <p className="text-gray-500 text-sm mt-0.5">Visão geral da plataforma Educajá</p>
       </div>
 
       {loading ? (

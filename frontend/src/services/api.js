@@ -15,6 +15,10 @@ api.interceptors.request.use((config) => {
   const tenantId = localStorage.getItem("tenant_id");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   if (tenantId) config.params = { ...config.params, tenant: tenantId };
+  // Para uploads multipart, deixar axios detectar e setar o boundary correcto
+  if (config.data instanceof FormData) {
+    delete config.headers["Content-Type"];
+  }
   return config;
 });
 

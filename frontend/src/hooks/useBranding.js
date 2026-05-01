@@ -6,7 +6,7 @@ const BRANDS = {
 };
 
 const DEFAULT = {
-  name: "EduSoft",
+  name: "Educajá",
   logo: null,
 };
 

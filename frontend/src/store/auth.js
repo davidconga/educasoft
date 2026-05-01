@@ -10,6 +10,7 @@ export const useAuthStore = create(
         localStorage.setItem("tenant_id", tenantId);
         set({ token, user, escola, tenantId });
       },
+      updateEscola: (patch) => set(state => ({ escola: { ...(state.escola || {}), ...patch } })),
       logout: () => { localStorage.clear(); set({ token: null, user: null, escola: null, tenantId: null }); },
       isAuthenticated: () => !!get().token,
     }),

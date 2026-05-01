@@ -26,16 +26,27 @@ class CursoController extends Controller {
     }
     // Plano Curricular
     public function disciplinas(Curso $curso) {
-        return response()->json($curso->disciplinas()->orderBy("ano")->orderBy("semestre")->get());
+        return response()->json(
+            $curso->disciplinas()->with("classe")
+                ->orderBy("classe_id")->orderBy("ano")->orderBy("semestre")->get()
+        );
     }
     public function storeDisciplina(Request $request, Curso $curso) {
-        $request->validate(["nome" => "required"]);
-        $disc = $curso->disciplinas()->create($request->only(["nome","codigo","carga_horaria","ano","semestre","obrigatoria","descricao"]));
-        return response()->json($disc, 201);
+        $request->validate([
+            "nome"      => "required",
+            "classe_id" => "nullable|exists:classes,id",
+        ]);
+        $disc = $curso->disciplinas()->create($request->only([
+            "classe_id","nome","codigo","carga_horaria","ano","semestre","obrigatoria","descricao",
+        ]));
+        return response()->json($disc->load("classe"), 201);
     }
     public function updateDisciplina(Request $request, Curso $curso, CursoDisciplina $disciplina) {
-        $disciplina->update($request->only(["nome","codigo","carga_horaria","ano","semestre","obrigatoria","descricao"]));
-        return response()->json($disciplina);
+        $request->validate(["classe_id" => "nullable|exists:classes,id"]);
+        $disciplina->update($request->only([
+            "classe_id","nome","codigo","carga_horaria","ano","semestre","obrigatoria","descricao",
+        ]));
+        return response()->json($disciplina->load("classe"));
     }
     public function destroyDisciplina(Curso $curso, CursoDisciplina $disciplina) {
         $disciplina->delete();

@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
 class MigrarGolfinho extends Command
 {
     protected $signature   = 'migrar:golfinho {--fresh : Limpa escola_golfinho antes de migrar}';
-    protected $description = 'Migra dados do sistema antigo Golfinho para o EduSoft (escola_golfinho)';
+    protected $description = 'Migra dados do sistema antigo Golfinho para o Educajá (escola_golfinho)';
 
     private array $mapCursos      = [];
     private array $mapClasses     = [];
@@ -34,7 +34,7 @@ class MigrarGolfinho extends Command
 
     public function handle(): int
     {
-        $this->info('=== Migração Colégio Golfinho → EduSoft ===');
+        $this->info('=== Migração Colégio Golfinho → Educajá ===');
         $this->info('Fonte: golfinho_source | Destino: escola_golfinho');
         $this->newLine();
 

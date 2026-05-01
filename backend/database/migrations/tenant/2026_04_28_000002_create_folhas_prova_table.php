@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
     public function up(): void {
+        if (Schema::connection('tenant')->hasTable('folhas_prova')) return;
         Schema::connection('tenant')->create('folhas_prova', function (Blueprint $table) {
             $table->id();
             $table->string('codigo', 20)->unique();

@@ -88,8 +88,14 @@ export default function Professores() {
           {professores.map(p => (
             <div key={p.id} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-11 h-11 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-base font-bold flex-shrink-0">
-                  {p.user?.nome?.[0]?.toUpperCase()}
+                <div className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0">
+                  {p.foto ? (
+                    <img src={`/storage/${p.foto}`} alt={p.user?.nome} className="w-full h-full object-cover"/>
+                  ) : (
+                    <div className="w-full h-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-base font-bold">
+                      {p.user?.nome?.[0]?.toUpperCase()}
+                    </div>
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-slate-800 truncate">{p.user?.nome}</p>

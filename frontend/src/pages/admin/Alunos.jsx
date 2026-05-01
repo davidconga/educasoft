@@ -145,6 +145,28 @@ export default function Alunos() {
 
   const abrirSenha = (aluno) => { setSenhaModal(aluno); setSenhaForm({ password: "", password_confirmation: "" }); setMsgSenha(null); setShowSenha(false); };
 
+  const handleConfirmarMatricula = async (matriculaId, alunoNome) => {
+    if (!confirm(`Confirmar matrícula de ${alunoNome}?`)) return;
+    try {
+      await api.patch(`/matriculas/${matriculaId}/confirmar`);
+      load();
+    } catch (err) {
+      const faltam = err.response?.data?.documentos_em_falta;
+      if (err.response?.status === 422 && Array.isArray(faltam) && faltam.length) {
+        const msg = `Faltam documentos obrigatórios para ${alunoNome}:\n\n  • ${faltam.join("\n  • ")}\n\nForçar a confirmação mesmo assim?`;
+        if (!confirm(msg)) return;
+        try {
+          await api.patch(`/matriculas/${matriculaId}/confirmar?forcar=1`);
+          load();
+        } catch (e2) {
+          alert(e2.response?.data?.message || "Erro ao forçar confirmação.");
+        }
+        return;
+      }
+      alert(err.response?.data?.message || "Erro ao confirmar matrícula.");
+    }
+  };
+
   const handleDefinirSenha = async (e) => {
     e.preventDefault();
     if (senhaForm.password !== senhaForm.password_confirmation) { setMsgSenha({ type: "error", text: "As senhas não coincidem." }); return; }
@@ -188,10 +210,10 @@ export default function Alunos() {
             className="flex items-center gap-2 border border-slate-200 text-slate-600 hover:bg-slate-50 px-3 py-2 rounded-xl text-sm font-medium">
             <Printer size={15} /> Imprimir Lista
           </button>
-          <button onClick={() => setShowForm(true)}
+          <Link to="/matriculas"
             className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700 text-sm font-medium">
-            <UserPlus size={16} /> Novo Aluno
-          </button>
+            <UserPlus size={16} /> Nova Inscrição
+          </Link>
         </div>
       </div>
 
@@ -341,6 +363,12 @@ export default function Alunos() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <Link to={`/alunos/${a.id}`} className="text-blue-600 hover:text-blue-800 hover:underline text-sm font-medium">Ver</Link>
+                        {mat?.status === "pendente" && (
+                          <button onClick={() => handleConfirmarMatricula(mat.id, a.user?.nome)} title="Confirmar matrícula"
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors">
+                            <CheckCircle size={14} />
+                          </button>
+                        )}
                         <button onClick={() => abrirSenha(a)} title="Definir senha"
                           className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-orange-600 hover:bg-orange-50 transition-colors">
                           <KeyRound size={14} />

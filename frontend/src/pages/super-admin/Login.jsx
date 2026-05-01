@@ -31,7 +31,7 @@ export default function SuperAdminLogin() {
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-gray-900 rounded-2xl flex items-center justify-center mx-auto mb-4 text-white text-3xl">⚙️</div>
           <h1 className="text-2xl font-bold text-gray-800">Painel Super-Admin</h1>
-          <p className="text-gray-500 text-sm mt-1">EduSoft — Gestão de Escolas</p>
+          <p className="text-gray-500 text-sm mt-1">Educajá — Gestão de Escolas</p>
         </div>
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm">{error}</div>

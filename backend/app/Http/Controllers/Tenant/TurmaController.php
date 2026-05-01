@@ -5,13 +5,21 @@ use App\Models\Tenant\Turma;
 use Illuminate\Http\Request;
 class TurmaController extends Controller {
     public function index(Request $request) {
-        $query = Turma::with("classe.curso")->withCount("matriculas");
+        $query = Turma::with("classe.curso","sala")
+            ->withCount(["matriculas as ocupacao" => fn($q) => $q->whereIn("status", ["pendente","activa"])]);
         if ($request->ano_letivo) $query->where("ano_letivo", $request->ano_letivo);
         if ($request->classe_id)  $query->where("classe_id",  $request->classe_id);
+        if ($request->turno_id)   $query->where("turno_id",   $request->turno_id);
         if ($request->curso_id) {
             $query->whereHas("classe", fn($q) => $q->where("curso_id", $request->curso_id));
         }
-        return response()->json($query->orderBy("nome")->get());
+        $turmas = $query->orderBy("nome")->get()->map(function ($t) {
+            $cap = $t->capacidadeEfetiva();
+            $t->capacidade_efetiva = $cap;
+            $t->vagas = $cap > 0 ? max(0, $cap - $t->ocupacao) : 0;
+            return $t;
+        });
+        return response()->json($turmas);
     }
     private function sanitize(Request $request): array {
         $data = $request->only(["nome","nivel","turno","turno_id","ano_letivo","capacidade","classe_id","sala_id","diretor_turma_id","descricao","ativo"]);

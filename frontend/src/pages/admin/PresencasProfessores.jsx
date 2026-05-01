@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Save, RefreshCw, Printer, CheckCircle, AlertCircle, ClipboardCheck, BarChart2 } from "lucide-react";
+import { Save, RefreshCw, Printer, CheckCircle, AlertCircle, ClipboardCheck, BarChart2, Clock } from "lucide-react";
 import api from "../../services/api";
 
 const sel = "w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50";
@@ -10,6 +10,13 @@ const ESTADOS = [
   { value: "falta_injustificada", label: "FI", full: "Falta Injustificada", cls: "bg-red-500 text-white" },
 ];
 
+const fmtMin = (m) => {
+  if (!m && m !== 0) return "—";
+  const h = Math.floor(m / 60);
+  const min = m % 60;
+  return h > 0 ? `${h}h${min > 0 ? String(min).padStart(2, "0") : ""}` : `${min}m`;
+};
+
 function hoje() { return new Date().toISOString().slice(0, 10); }
 
 function printRelatorio({ dataInicio, dataFim, professores, escolaNome, logoUrl }) {
@@ -18,10 +25,11 @@ function printRelatorio({ dataInicio, dataFim, professores, escolaNome, logoUrl 
       <td style="border:1px solid #ccc;padding:4px 8px;text-align:center">${p.ord}</td>
       <td style="border:1px solid #ccc;padding:4px 8px">${p.nome ?? ""}</td>
       <td style="border:1px solid #ccc;padding:4px 8px;text-align:center">${p.numero ?? ""}</td>
-      <td style="border:1px solid #ccc;padding:4px 8px;text-align:center">${p.total_dias}</td>
+      <td style="border:1px solid #ccc;padding:4px 8px;text-align:center">${p.total_aulas}</td>
       <td style="border:1px solid #ccc;padding:4px 8px;text-align:center;color:#059669">${p.presentes}</td>
       <td style="border:1px solid #ccc;padding:4px 8px;text-align:center;color:#d97706">${p.faltas_just}</td>
       <td style="border:1px solid #ccc;padding:4px 8px;text-align:center;color:#dc2626">${p.faltas_injust}</td>
+      <td style="border:1px solid #ccc;padding:4px 8px;text-align:center">${fmtMin(p.minutos_lecionados)}</td>
       <td style="border:1px solid #ccc;padding:4px 8px;text-align:center;font-weight:bold;color:${(p.percentagem??100)>=90?"#059669":"#dc2626"}">${p.percentagem != null ? p.percentagem + "%" : "—"}</td>
     </tr>`).join("");
   const logoHtml = logoUrl ? `<img src="${logoUrl}" style="height:50px;object-fit:contain;margin-right:12px" onerror="this.style.display='none'">` : "";
@@ -47,10 +55,11 @@ function printRelatorio({ dataInicio, dataFim, professores, escolaNome, logoUrl 
         <th style="border:1px solid #475569;padding:6px;width:40px">Nº</th>
         <th style="border:1px solid #475569;padding:6px;text-align:left">Professor</th>
         <th style="border:1px solid #475569;padding:6px">Nº Prof.</th>
-        <th style="border:1px solid #475569;padding:6px">Dias Reg.</th>
+        <th style="border:1px solid #475569;padding:6px">Aulas Reg.</th>
         <th style="border:1px solid #475569;padding:6px;color:#6ee7b7">Pres.</th>
         <th style="border:1px solid #475569;padding:6px;color:#fcd34d">FJ</th>
         <th style="border:1px solid #475569;padding:6px;color:#fca5a5">FI</th>
+        <th style="border:1px solid #475569;padding:6px;color:#93c5fd">Min. Lec.</th>
         <th style="border:1px solid #475569;padding:6px">%</th>
       </tr></thead>
       <tbody>${rows}</tbody>
@@ -62,8 +71,9 @@ function printRelatorio({ dataInicio, dataFim, professores, escolaNome, logoUrl 
 /* ── TAB A: Registo Diário ── */
 function RegistoDiario() {
   const [data,    setData]    = useState(hoje());
-  const [profs,   setProfs]   = useState([]);
+  const [aulas,   setAulas]   = useState([]);
   const [draft,   setDraft]   = useState({});
+  const [diaSem,  setDiaSem]  = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving,  setSaving]  = useState(false);
   const [msg,     setMsg]     = useState(null);
@@ -73,30 +83,35 @@ function RegistoDiario() {
     setLoading(true); setMsg(null);
     try {
       const { data: res } = await api.get("/presencas/professores", { params: { data } });
-      setProfs(res.professores ?? []);
+      const lista = res.aulas ?? [];
+      setAulas(lista);
+      setDiaSem(res.dia_semana ?? null);
       const d = {};
-      (res.professores ?? []).forEach(p => { d[p.professor_id] = { estado: p.estado, observacao: p.observacao }; });
+      lista.forEach(a => { d[a.horario_id] = { estado: a.estado, observacao: a.observacao }; });
       setDraft(d);
-    } catch { setMsg({ type: "error", text: "Erro ao carregar professores." }); }
+    } catch { setMsg({ type: "error", text: "Erro ao carregar aulas." }); }
     finally  { setLoading(false); }
   }, [data]);
 
   useEffect(() => { load(); }, [load]);
 
-  const setEstado = (profId, estado) =>
-    setDraft(prev => ({ ...prev, [profId]: { ...prev[profId], estado } }));
+  const setEstado = (horarioId, estado) =>
+    setDraft(prev => ({ ...prev, [horarioId]: { ...prev[horarioId], estado } }));
 
   const marcarTodos = (estado) =>
-    setDraft(prev => Object.fromEntries(profs.map(p => [p.professor_id, { ...prev[p.professor_id], estado }])));
+    setDraft(prev => Object.fromEntries(aulas.map(a => [a.horario_id, { ...prev[a.horario_id], estado }])));
 
   const handleSave = async () => {
-    if (!profs.length) return;
+    if (!aulas.length) return;
     setSaving(true); setMsg(null);
     try {
-      const presencas = profs.map(p => ({
-        professor_id: p.professor_id,
-        estado:       draft[p.professor_id]?.estado ?? "presente",
-        observacao:   draft[p.professor_id]?.observacao ?? "",
+      const presencas = aulas.map(a => ({
+        professor_id: a.professor_id,
+        horario_id:   a.horario_id,
+        hora_inicio:  a.hora_inicio,
+        hora_fim:     a.hora_fim,
+        estado:       draft[a.horario_id]?.estado ?? "presente",
+        observacao:   draft[a.horario_id]?.observacao ?? "",
       }));
       const res = await api.post("/presencas/professores/bulk", { data, presencas });
       setMsg({ type: "success", text: res.data.message });
@@ -105,7 +120,12 @@ function RegistoDiario() {
   };
 
   const totais = { presente: 0, falta_justificada: 0, falta_injustificada: 0 };
-  profs.forEach(p => { const e = draft[p.professor_id]?.estado ?? "presente"; totais[e] = (totais[e] ?? 0) + 1; });
+  aulas.forEach(a => { const e = draft[a.horario_id]?.estado ?? "presente"; totais[e] = (totais[e] ?? 0) + 1; });
+
+  const totalMinutos = aulas.reduce((s, a) => {
+    const e = draft[a.horario_id]?.estado ?? "presente";
+    return e === "presente" ? s + a.minutos : s;
+  }, 0);
 
   return (
     <div className="space-y-4">
@@ -132,19 +152,26 @@ function RegistoDiario() {
 
       {loading && <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-12 text-center text-slate-400">A carregar...</div>}
 
-      {!loading && profs.length === 0 && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-12 text-center text-slate-400">Sem professores registados.</div>
+      {!loading && aulas.length === 0 && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-12 text-center text-slate-400">
+          <Clock size={32} className="mx-auto mb-3 opacity-30" />
+          <p className="text-sm font-medium">Sem aulas programadas para este dia</p>
+          {diaSem && <p className="text-xs mt-1 capitalize">{diaSem}-feira — verifique o horário</p>}
+        </div>
       )}
 
-      {!loading && profs.length > 0 && (
+      {!loading && aulas.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-3 flex-1">
-              <span className="text-sm font-medium text-slate-700">{profs.length} professores</span>
+              <span className="text-sm font-medium text-slate-700">{aulas.length} aula(s)</span>
               <div className="flex gap-2 text-xs">
                 <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">{totais.presente} Pres.</span>
                 <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">{totais.falta_justificada} FJ</span>
                 <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">{totais.falta_injustificada} FI</span>
+                <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium flex items-center gap-1">
+                  <Clock size={10} /> {fmtMin(totalMinutos)} lecionados
+                </span>
               </div>
             </div>
             <div className="flex gap-2">
@@ -160,24 +187,40 @@ function RegistoDiario() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-100">
                 <tr>
-                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 w-10">Nº</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 w-28">Hora</th>
                   <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Professor</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 w-28">Nº Prof.</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500">Disciplina</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 w-24">Turma</th>
+                  <th className="text-center px-4 py-2.5 text-xs font-semibold text-slate-500 w-16">Min.</th>
                   <th className="text-center px-4 py-2.5 text-xs font-semibold text-slate-500 w-64">Estado</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {profs.map((p, idx) => {
-                  const estado = draft[p.professor_id]?.estado ?? "presente";
+                {aulas.map((a, idx) => {
+                  const estado = draft[a.horario_id]?.estado ?? "presente";
+                  const presente = estado === "presente";
                   return (
-                    <tr key={p.professor_id} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}>
-                      <td className="px-4 py-2.5 text-slate-400 font-mono text-xs">{p.ord}</td>
-                      <td className="px-4 py-2.5 font-medium text-slate-800">{p.nome}</td>
-                      <td className="px-4 py-2.5 text-slate-500 text-xs font-mono">{p.numero}</td>
+                    <tr key={a.horario_id} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}>
+                      <td className="px-4 py-2.5 font-mono text-xs text-slate-600 font-medium">
+                        {a.hora_inicio} – {a.hora_fim}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <p className="font-medium text-slate-800">{a.professor_nome}</p>
+                        <p className="text-xs text-slate-400 font-mono">{a.professor_numero}</p>
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-600">{a.disciplina}</td>
+                      <td className="px-4 py-2.5">
+                        <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{a.turma}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        <span className={`text-xs font-semibold ${presente ? "text-blue-600" : "text-slate-300"}`}>
+                          {presente ? fmtMin(a.minutos) : "—"}
+                        </span>
+                      </td>
                       <td className="px-4 py-2.5">
                         <div className="flex gap-1.5 justify-center">
                           {ESTADOS.map(e => (
-                            <button key={e.value} onClick={() => setEstado(p.professor_id, e.value)}
+                            <button key={e.value} onClick={() => setEstado(a.horario_id, e.value)}
                               title={e.full}
                               className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
                                 estado === e.value ? e.cls + " shadow-sm" : "bg-slate-100 text-slate-400 hover:bg-slate-200"
@@ -257,10 +300,11 @@ function Relatorio({ escolaNome, logoUrl }) {
                   <th className="px-3 py-2.5 text-left text-xs font-semibold w-10">Nº</th>
                   <th className="px-3 py-2.5 text-left text-xs font-semibold">Professor</th>
                   <th className="px-3 py-2.5 text-center text-xs font-semibold w-24">Nº Prof.</th>
-                  <th className="px-3 py-2.5 text-center text-xs font-semibold w-16">Dias Reg.</th>
+                  <th className="px-3 py-2.5 text-center text-xs font-semibold w-20">Aulas</th>
                   <th className="px-3 py-2.5 text-center text-xs font-semibold w-16 text-emerald-300">Pres.</th>
                   <th className="px-3 py-2.5 text-center text-xs font-semibold w-12 text-amber-300">FJ</th>
                   <th className="px-3 py-2.5 text-center text-xs font-semibold w-12 text-red-300">FI</th>
+                  <th className="px-3 py-2.5 text-center text-xs font-semibold w-24 text-blue-300">Min. Lec.</th>
                   <th className="px-3 py-2.5 text-center text-xs font-semibold w-16">%</th>
                 </tr>
               </thead>
@@ -273,10 +317,11 @@ function Relatorio({ escolaNome, logoUrl }) {
                       <td className="px-3 py-2 text-slate-400 font-mono text-xs">{p.ord}</td>
                       <td className="px-3 py-2 font-medium text-slate-800">{p.nome}</td>
                       <td className="px-3 py-2 text-center text-slate-500 font-mono text-xs">{p.numero}</td>
-                      <td className="px-3 py-2 text-center text-slate-600">{p.total_dias}</td>
+                      <td className="px-3 py-2 text-center text-slate-600">{p.total_aulas}</td>
                       <td className="px-3 py-2 text-center font-semibold text-emerald-600">{p.presentes}</td>
                       <td className="px-3 py-2 text-center text-amber-600">{p.faltas_just}</td>
                       <td className="px-3 py-2 text-center text-red-600">{p.faltas_injust}</td>
+                      <td className="px-3 py-2 text-center font-semibold text-blue-600">{fmtMin(p.minutos_lecionados)}</td>
                       <td className={`px-3 py-2 text-center font-bold ${pct == null ? "text-slate-300" : ok ? "text-emerald-600" : "text-red-600"}`}>
                         {pct != null ? pct + "%" : "—"}
                       </td>
@@ -310,7 +355,7 @@ export default function PresencasProfessores() {
         <div className="flex rounded-xl border border-slate-200 overflow-hidden text-sm font-medium">
           <button onClick={() => setTab("registo")}
             className={`flex items-center gap-1.5 px-4 py-2 transition-colors ${tab === "registo" ? "bg-blue-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>
-            <ClipboardCheck size={14} /> Registo Diário
+            <ClipboardCheck size={14} /> Registo por Aula
           </button>
           <button onClick={() => setTab("relatorio")}
             className={`flex items-center gap-1.5 px-4 py-2 transition-colors ${tab === "relatorio" ? "bg-blue-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>

@@ -200,9 +200,10 @@ function ListaCursos({ onSelect }) {
 ══════════════════════════════════════════════════════════════ */
 function PlanoCurricular({ curso, onBack }) {
   const [disciplinas, setDisciplinas] = useState([]);
+  const [classes, setClasses]         = useState([]);
   const [loading, setLoading]         = useState(true);
   const [modal, setModal]             = useState(null);
-  const [form, setForm]               = useState({ nome: "", codigo: "", carga_horaria: "", ano: "1", semestre: "", obrigatoria: true, descricao: "" });
+  const [form, setForm]               = useState({ nome: "", codigo: "", carga_horaria: "", classe_id: "", semestre: "", obrigatoria: true, descricao: "" });
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState("");
   const [catalogo, setCatalogo]       = useState([]);
@@ -214,10 +215,12 @@ function PlanoCurricular({ curso, onBack }) {
   useEffect(load, [curso.id]);
   useEffect(() => {
     api.get("/disciplinas").then(r => setCatalogo(r.data?.data ?? r.data ?? [])).catch(() => {});
-  }, []);
+    // Carrega as classes deste curso (para o dropdown)
+    api.get(`/classes?curso_id=${curso.id}`).then(r => setClasses(r.data?.data ?? r.data ?? [])).catch(() => {});
+  }, [curso.id]);
 
-  const openNew  = () => { setForm({ nome: "", codigo: "", carga_horaria: "", ano: "1", semestre: "", obrigatoria: true, descricao: "" }); setError(""); setModal("new"); };
-  const openEdit = (d) => { setForm({ ...d, obrigatoria: !!d.obrigatoria }); setError(""); setModal(d); };
+  const openNew  = () => { setForm({ nome: "", codigo: "", carga_horaria: "", classe_id: classes[0]?.id ?? "", semestre: "", obrigatoria: true, descricao: "" }); setError(""); setModal("new"); };
+  const openEdit = (d) => { setForm({ ...d, classe_id: d.classe_id ?? "", obrigatoria: !!d.obrigatoria }); setError(""); setModal(d); };
 
   const handleSelectCatalogo = (id) => {
     const disc = catalogo.find(d => String(d.id) === String(id));
@@ -242,14 +245,20 @@ function PlanoCurricular({ curso, onBack }) {
     load();
   };
 
-  // agrupar por ano
-  const porAno = disciplinas.reduce((acc, d) => {
-    const a = d.ano || 1;
-    if (!acc[a]) acc[a] = [];
-    acc[a].push(d);
+  // agrupar por classe (com fallback para ano em registos antigos sem classe_id)
+  const porClasse = disciplinas.reduce((acc, d) => {
+    const key = d.classe_id ? `c${d.classe_id}` : `a${d.ano || 1}`;
+    if (!acc[key]) {
+      acc[key] = {
+        nome: d.classe?.nome ?? `${d.ano || 1}º Ano`,
+        ordem: d.classe?.ordem ?? d.ano ?? 99,
+        disciplinas: [],
+      };
+    }
+    acc[key].disciplinas.push(d);
     return acc;
   }, {});
-  const anos = Object.keys(porAno).sort((a, b) => Number(a) - Number(b));
+  const grupos = Object.entries(porClasse).sort(([,a],[,b]) => (a.ordem ?? 99) - (b.ordem ?? 99));
 
   const totalHoras = disciplinas.reduce((s, d) => s + Number(d.carga_horaria || 0), 0);
 
@@ -289,12 +298,12 @@ function PlanoCurricular({ curso, onBack }) {
         </div>
       ) : (
         <div className="space-y-6">
-          {anos.map(ano => (
-            <div key={ano}>
+          {grupos.map(([key, grupo]) => (
+            <div key={key}>
               <div className="flex items-center gap-3 mb-3">
-                <span className="text-sm font-semibold text-slate-600">{ano}º Ano</span>
+                <span className="text-sm font-semibold text-slate-600">{grupo.nome}</span>
                 <div className="flex-1 h-px bg-slate-100" />
-                <span className="text-xs text-slate-400">{porAno[ano].length} disciplina(s)</span>
+                <span className="text-xs text-slate-400">{grupo.disciplinas.length} disciplina(s)</span>
               </div>
               <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
                 <table className="w-full text-sm">
@@ -309,7 +318,7 @@ function PlanoCurricular({ curso, onBack }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {porAno[ano].map(d => (
+                    {grupo.disciplinas.map(d => (
                       <tr key={d.id} className="hover:bg-slate-50 transition-colors">
                         <td className="px-5 py-3.5">
                           <p className="font-medium text-slate-800">{d.nome}</p>
@@ -364,12 +373,14 @@ function PlanoCurricular({ curso, onBack }) {
               <Field label="Carga Horária (h)">
                 <input type="number" min="0" value={form.carga_horaria} onChange={e => setForm({ ...form, carga_horaria: e.target.value })} placeholder="0" className={inp} />
               </Field>
-              <Field label="Ano *">
-                <select required value={form.ano} onChange={e => setForm({ ...form, ano: e.target.value })} className={inp}>
-                  {Array.from({ length: Number(curso.duracao_anos) || 4 }, (_, i) => i + 1).map(a => (
-                    <option key={a} value={a}>{a}º Ano</option>
-                  ))}
+              <Field label="Classe *">
+                <select required value={form.classe_id} onChange={e => setForm({ ...form, classe_id: e.target.value })} className={inp}>
+                  <option value="">Seleccionar classe...</option>
+                  {classes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                 </select>
+                {classes.length === 0 && (
+                  <p className="text-xs text-amber-600 mt-1">⚠ Este curso não tem classes configuradas. Crie em Configurações → Classes & Salas.</p>
+                )}
               </Field>
               <Field label="Semestre">
                 <select value={form.semestre} onChange={e => setForm({ ...form, semestre: e.target.value })} className={inp}>

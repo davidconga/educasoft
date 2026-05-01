@@ -2,12 +2,13 @@ import { useState, useEffect } from "react";
 import api from "../../services/api";
 import { useAuthStore } from "../../store/auth";
 import { imprimirRecibo, buildReciboHtml } from "../../components/Recibo";
+import { useMeses } from "../../hooks/useMeses";
+import SaftButton from "../../components/SaftButton";
 
 const fmt = (v) => Number(v || 0).toLocaleString("pt-AO");
 const ANO_ATUAL = String(new Date().getFullYear());
 const ANOS = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - 1 + i));
 const getAnoFromMesRef = (mr) => { if (!mr) return null; const m = mr.match(/\b(\d{4})\b/); return m ? m[1] : null; };
-const MESES_NOMES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
 const statusCfg = {
   pago:      { label: "Pago",      cls: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" },
@@ -174,6 +175,7 @@ function CalendarioPropinas({ alunoSel, onConfirmar }) {
               <tr className="border-b border-slate-100">
                 <th className="px-3 py-3 w-10" />
                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Mês</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Preçário</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Referência</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Vencimento</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Pago em</th>
@@ -209,6 +211,9 @@ function CalendarioPropinas({ alunoSel, onConfirmar }) {
                     </td>
                     <td className="px-5 py-3.5">
                       <span className="font-medium text-slate-800">{mes_nome}</span>
+                    </td>
+                    <td className="px-5 py-3.5 text-slate-600 text-xs">
+                      {p?.propina?.nome || <span className="text-slate-300">—</span>}
                     </td>
                     <td className="px-5 py-3.5 text-slate-500 font-mono text-xs">{referencia}</td>
                     <td className="px-5 py-3.5 text-slate-500 text-xs">
@@ -278,14 +283,36 @@ function CalendarioPropinas({ alunoSel, onConfirmar }) {
 
 /* ── Modal: Gerar Propinas ──────────────────────────────────── */
 function ModalGerarPropinas({ alunoSel, onClose, onSuccess }) {
+  const meses = useMeses();
   const [propinas, setPropinas] = useState([]);
   const [form, setForm]         = useState({ propina_id: "", ano_letivo: ANO_ATUAL, meses: Array.from({length:12},(_,i)=>i+1), para_todos: false });
   const [saving, setSaving]     = useState(false);
   const [msg, setMsg]           = useState("");
 
+  // Identificar classe + curso do aluno seleccionado (a partir da matrícula activa)
+  const matAtiva   = alunoSel.matriculas?.find(m => m.status === "activa") ?? alunoSel.matriculas?.[0];
+  const alunoClasse = matAtiva?.turma?.classe?.nome ?? null;
+  const alunoCursoId = matAtiva?.turma?.classe?.curso_id ?? null;
+
   useEffect(() => {
     api.get("/precario/propinas").then(r => setPropinas(r.data)).catch(() => {});
   }, []);
+
+  // Filtra propinas pela classe/curso do aluno (excepto se gerar para todos)
+  const propinasVisiveis = (form.para_todos || !alunoClasse)
+    ? propinas
+    : propinas.filter(p => {
+        const matchClasse = !p.nivel || p.nivel === alunoClasse;
+        const matchCurso  = !p.curso_id || String(p.curso_id) === String(alunoCursoId);
+        return matchClasse && matchCurso;
+      });
+
+  // Reset propina_id se a actual deixar de estar visível
+  useEffect(() => {
+    if (form.propina_id && !propinasVisiveis.some(p => String(p.id) === String(form.propina_id))) {
+      setForm(f => ({ ...f, propina_id: "" }));
+    }
+  }, [propinasVisiveis.length, form.para_todos]);
 
   const toggleMes = (m) => setForm(f => ({
     ...f,
@@ -323,12 +350,20 @@ function ModalGerarPropinas({ alunoSel, onClose, onSuccess }) {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1.5">Propina (Precário) *</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5">
+                Propina (Precário) *
+                {alunoClasse && !form.para_todos && (
+                  <span className="ml-2 font-normal text-slate-400">— filtradas para {alunoClasse}</span>
+                )}
+              </label>
               <select required value={form.propina_id} onChange={e => setForm({...form, propina_id: e.target.value})}
                 className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50">
-                <option value="">Seleccionar...</option>
-                {propinas.map(p => <option key={p.id} value={p.id}>{p.nome || p.nivel || "Propina"} — {fmt(p.valor_mensal)} Kz/mês</option>)}
+                <option value="">{propinasVisiveis.length ? "Seleccionar..." : "Sem propinas associadas a esta classe"}</option>
+                {propinasVisiveis.map(p => <option key={p.id} value={p.id}>{p.nome || p.nivel || "Propina"} — {fmt(p.valor_mensal)} Kz/mês</option>)}
               </select>
+              {alunoClasse && !form.para_todos && propinasVisiveis.length === 0 && (
+                <p className="text-xs text-amber-600 mt-1">⚠ Nenhuma propina associada a {alunoClasse}. Configure em Precário → Propinas.</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">Ano Lectivo *</label>
@@ -342,13 +377,13 @@ function ModalGerarPropinas({ alunoSel, onClose, onSuccess }) {
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-2">Meses a gerar</label>
             <div className="grid grid-cols-4 gap-1.5">
-              {MESES_NOMES.map((nome, i) => {
-                const m = i + 1;
-                const sel = form.meses.includes(m);
+              {meses.map(({ id, nome, abreviatura }) => {
+                const sel = form.meses.includes(id);
                 return (
-                  <button key={m} type="button" onClick={() => toggleMes(m)}
+                  <button key={id} type="button" onClick={() => toggleMes(id)}
+                    title={nome}
                     className={`py-1.5 rounded-lg text-xs font-medium border transition-colors ${sel ? "bg-blue-600 text-white border-blue-600" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
-                    {nome.slice(0,3)}
+                    {abreviatura}
                   </button>
                 );
               })}
@@ -448,8 +483,52 @@ function ModalGerarEmolumentos({ alunoSel, onClose, onSuccess }) {
 }
 
 /* ── Página principal ───────────────────────────────────────── */
+/**
+ * Constrói um label descritivo do "serviço" de um pagamento.
+ * Combina nome + escopo (nivel/turno) da propina/emolumento para diferenciar
+ * mesmo quando o nome é genérico (ex: várias propinas chamadas "Propina").
+ */
+function descServico(p, tipoCfg) {
+  if (p?.propina) {
+    const parts = [p.propina.nome || "Propina"];
+    const escopo = [p.propina.nivel, p.propina.turno].filter(Boolean).join(" · ");
+    if (escopo) parts.push(escopo);
+    return parts.join(" — ");
+  }
+  if (p?.emolumento) {
+    return p.emolumento.nome || "Emolumento";
+  }
+  if (p?.plano) {
+    return p.plano.nome || "Plano";
+  }
+  return tipoCfg?.[p?.tipo]?.label || p?.tipo || p?.referencia || "—";
+}
+
+/**
+ * Converte mes_referencia para label legível.
+ * Aceita formatos: "YYYY-MM" (→ "Janeiro 2026"), "YYYY-YYYY-MM" (→ "Janeiro 2025-2026"),
+ * e devolve a string original se já tiver nome de mês ou for desconhecida.
+ */
+function formatMesRef(mr, meses) {
+  if (!mr || !meses?.length) return mr || "";
+  // YYYY-YYYY-MM
+  let m = mr.match(/^(\d{4})-(\d{4})-(\d{1,2})$/);
+  if (m) {
+    const nome = meses.find(x => x.id === Number(m[3]))?.nome;
+    return nome ? `${nome} ${m[1]}-${m[2]}` : mr;
+  }
+  // YYYY-MM
+  m = mr.match(/^(\d{4})-(\d{1,2})$/);
+  if (m) {
+    const nome = meses.find(x => x.id === Number(m[2]))?.nome;
+    return nome ? `${nome} ${m[1]}` : mr;
+  }
+  return mr; // já tem nome de mês ou formato desconhecido
+}
+
 export default function Tesouraria() {
   const { escola } = useAuthStore();
+  const meses = useMeses();
   const [alunos, setAlunos]             = useState([]);
   const [search, setSearch]             = useState("");
   const [loadingAlunos, setLoadingAlunos] = useState(true);
@@ -465,19 +544,25 @@ export default function Tesouraria() {
   const [showGerarPropinas, setShowGerarPropinas]     = useState(false);
   const [showGerarEmolumentos, setShowGerarEmolumentos] = useState(false);
   const [planos, setPlanos]             = useState([]);
-  const [form, setForm]                 = useState({ plano_id: "", valor: "", tipo: "mensalidade", mes_referencia: "", metodo: "dinheiro", data_vencimento: "" });
+  const [propinasList, setPropinasList] = useState([]);
+  const [emolumentosList, setEmolumentosList] = useState([]);
+  const [form, setForm]                 = useState({ plano_id: "", propina_id: "", emolumento_id: "", valor: "", tipo: "mensalidade", mes_referencia: "", metodo: "dinheiro", data_vencimento: "" });
   const [saving, setSaving]             = useState(false);
   const [confirmId, setConfirmId]           = useState(null);
   const [confirmPag, setConfirmPag]         = useState(null);
   const [confirmMetodo, setConfirmMetodo]   = useState("dinheiro");
   const [confirmData, setConfirmData]       = useState("");
   const [confirmEntregue, setConfirmEntregue] = useState("");
+  const [confirmNumRef, setConfirmNumRef]   = useState("");
+  const [confirmError, setConfirmError]     = useState("");
 
   // Bulk selection state (list view)
   const [selectedIds, setSelectedIds]     = useState(new Set());
   const [bulkMetodo, setBulkMetodo]       = useState("dinheiro");
   const [bulkData, setBulkData]           = useState("");
   const [bulkEntregue, setBulkEntregue]   = useState("");
+  const [bulkNumRef, setBulkNumRef]       = useState("");
+  const [bulkError, setBulkError]         = useState("");
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
   const [payingBulk, setPayingBulk]       = useState(false);
   const [warnId, setWarnId]               = useState(null);
@@ -487,6 +572,8 @@ export default function Tesouraria() {
       .then(r => setAlunos(r.data.data || r.data))
       .finally(() => setLoadingAlunos(false));
     api.get("/planos-pagamento").then(r => setPlanos(r.data)).catch(() => {});
+    api.get("/precario/propinas").then(r => setPropinasList(r.data || [])).catch(() => {});
+    api.get("/precario/emolumentos").then(r => setEmolumentosList(r.data || [])).catch(() => {});
   }, []);
 
   const selecionarAluno = async (aluno) => {
@@ -511,27 +598,49 @@ export default function Tesouraria() {
   const recarregarAluno = () => alunoSel && selecionarAluno(alunoSel);
 
   const confirmarPagamento = async () => {
-    // Abre antes do await para contornar o bloqueio de popup após operação assíncrona
-    const win = window.open("about:blank", "_blank", "width=960,height=800");
+    // Validação client-side: nº referência obrigatório para multicaixa/transferência/referencia
+    setConfirmError("");
+    const exigeNumRef = ["multicaixa","transferencia","referencia"].includes(confirmMetodo);
+    if (exigeNumRef && !confirmNumRef.trim()) {
+      setConfirmError(`Para método "${confirmMetodo}", é obrigatório indicar o nº de referência.`);
+      return;
+    }
+    let pagamentoId = null;
     try {
       const res = await api.patch(`/pagamentos/${confirmId}/pagar`, {
         metodo: confirmMetodo,
         data_pagamento: confirmData || new Date().toISOString().split("T")[0],
+        num_referencia_externa: confirmNumRef || null,
         ...(Number(confirmEntregue) > 0 ? { valor_entregue: Number(confirmEntregue) } : {}),
       });
-      setConfirmId(null);
-      recarregarAluno();
-      if (win && res.data.pagamento) {
-        const html = buildReciboHtml(res.data.pagamento, escola);
-        win.document.open();
-        win.document.write(html);
-        win.document.close();
-      } else if (win) {
-        win.close();
+      pagamentoId = res.data?.pagamento?.id;
+    } catch (err) {
+      const msg = err.response?.data?.message
+        || (err.response?.data?.errors ? Object.values(err.response.data.errors)[0]?.[0] : null)
+        || "Erro ao confirmar pagamento.";
+      setConfirmError(msg);
+      return;
+    }
+    // Pagamento gravado com sucesso — fecha modal, refresca lista e abre PDF
+    setConfirmId(null);
+    setConfirmNumRef("");
+    recarregarAluno();
+    if (pagamentoId) abrirReciboPdf(pagamentoId);
+  };
+
+  const abrirReciboPdf = async (pagamentoId) => {
+    try {
+      const r = await api.get(`/pagamentos/${pagamentoId}/recibo.pdf`, { responseType: "blob" });
+      const url = URL.createObjectURL(new Blob([r.data], { type: "application/pdf" }));
+      const w = window.open(url, "_blank");
+      if (!w) {
+        // Popup bloqueado — força download
+        const a = document.createElement("a");
+        a.href = url; a.download = `recibo-${pagamentoId}.pdf`;
+        document.body.appendChild(a); a.click(); a.remove();
       }
     } catch (e) {
-      if (win) win.close();
-      throw e;
+      console.error("Erro ao abrir recibo PDF:", e);
     }
   };
 
@@ -541,7 +650,7 @@ export default function Tesouraria() {
     try {
       await api.post("/pagamentos", { ...form, aluno_id: alunoSel.id });
       setShowForm(false);
-      setForm({ plano_id: "", valor: "", tipo: "mensalidade", mes_referencia: "", metodo: "dinheiro", data_vencimento: "" });
+      setForm({ plano_id: "", propina_id: "", emolumento_id: "", valor: "", tipo: "mensalidade", mes_referencia: "", metodo: "dinheiro", data_vencimento: "" });
       recarregarAluno();
     } finally { setSaving(false); }
   };
@@ -579,28 +688,46 @@ export default function Tesouraria() {
   };
 
   const pagarSelecionados = async () => {
+    setBulkError("");
+    const exigeNumRef = ["multicaixa","transferencia","referencia"].includes(bulkMetodo);
+    if (exigeNumRef && !bulkNumRef.trim()) {
+      setBulkError(`Para método "${bulkMetodo}", é obrigatório indicar o nº de referência.`);
+      return;
+    }
     const ids = mensalidadesSorted.filter(m => selectedIds.has(m.id)).map(m => m.id);
-    const win = window.open("about:blank", "_blank", "width=960,height=800");
     setPayingBulk(true);
+    let loteId = null;
     try {
       const res = await api.post("/pagamentos/pagar-multiplos", {
         ids,
         metodo: bulkMetodo,
         data_pagamento: bulkData || new Date().toISOString().split("T")[0],
+        num_referencia_externa: bulkNumRef || null,
         ...(Number(bulkEntregue) > 0 ? { valor_entregue: Number(bulkEntregue) } : {}),
       });
-      if (win && res.data.pagamentos?.length) {
-        const html = buildReciboHtml(res.data.pagamentos, escola);
-        win.document.open(); win.document.write(html); win.document.close();
-      } else if (win) { win.close(); }
+      // Pega o lote_id do primeiro pagamento devolvido (todos compartilham o mesmo)
+      loteId = res.data?.pagamentos?.[0]?.lote_id ?? null;
     } catch (e) {
-      if (win) win.close();
+      console.error(e);
       throw e;
     } finally {
       setPayingBulk(false);
       setShowBulkConfirm(false);
       setSelectedIds(new Set());
       recarregarAluno();
+    }
+    // Após o flow finalizar, abre o PDF do lote (consolidado)
+    if (loteId) {
+      try {
+        const r = await api.get(`/pagamentos/lote/${loteId}/recibo.pdf`, { responseType: "blob" });
+        const url = URL.createObjectURL(new Blob([r.data], { type: "application/pdf" }));
+        const w = window.open(url, "_blank");
+        if (!w) {
+          const a = document.createElement("a");
+          a.href = url; a.download = `recibo-lote.pdf`;
+          document.body.appendChild(a); a.click(); a.remove();
+        }
+      } catch (err) { console.error("Erro ao abrir PDF do lote:", err); }
     }
   };
 
@@ -618,6 +745,18 @@ export default function Tesouraria() {
     return okStatus && okTipo && okAno;
   });
 
+  // Identifica o "lider" de cada lote (1ª linha de cada lote_id encontrada na lista filtrada).
+  // Linhas de um lote que não são líder ficam sem botões — o lote inteiro é representado pelo líder.
+  const loteLeaders = (() => {
+    const seen = new Set();
+    const leaders = new Set();
+    for (const p of pagamentosFiltrados) {
+      if (!p.lote_id) { leaders.add(p.id); continue; }
+      if (!seen.has(p.lote_id)) { seen.add(p.lote_id); leaders.add(p.id); }
+    }
+    return leaders;
+  })();
+
   const totalPago     = pagamentos.filter(p => p.status === "pago").reduce((s, p) => s + Number(p.valor), 0);
   const totalPendente = pagamentos.filter(p => p.status === "pendente").reduce((s, p) => s + Number(p.valor), 0);
   const totalVencido  = pagamentos.filter(p => p.status === "vencido").reduce((s, p) => s + Number(p.valor), 0);
@@ -628,7 +767,10 @@ export default function Tesouraria() {
       {/* ─── Painel esquerdo: lista de alunos ─── */}
       <div className="w-72 shrink-0 bg-white border-r border-slate-100 flex flex-col">
         <div className="p-4 border-b border-slate-100">
-          <h2 className="text-base font-semibold text-slate-800 mb-3">Alunos</h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-semibold text-slate-800">Alunos</h2>
+            <SaftButton variant="icon"/>
+          </div>
           <div className="relative">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
               <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -814,6 +956,8 @@ export default function Tesouraria() {
                                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Vencimento</th>
                                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Pago em</th>
                                 <th className="text-right px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Valor</th>
+                                <th className="text-right px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Multa</th>
+                                <th className="text-right px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Total</th>
                                 <th className="text-center px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Estado</th>
                                 <th className="px-5 py-3" />
                               </tr>
@@ -852,13 +996,21 @@ export default function Tesouraria() {
                                     </td>
                                     <td className="px-5 py-3.5">
                                       <p className="text-slate-700 font-medium">
-                                        {p.propina?.nome || p.emolumento?.nome || p.mes_referencia || p.referencia || p.observacao}
+                                        {p.propina?.nome || p.emolumento?.nome || p.plano?.nome || tipoCfg[p.tipo]?.label || p.tipo || p.referencia}
                                       </p>
-                                      {(p.propina || p.emolumento) && p.mes_referencia && (
-                                        <p className="text-xs text-slate-400">{p.mes_referencia}</p>
+                                      {(p.propina?.nivel || p.propina?.turno) && (
+                                        <p className="text-xs text-slate-500">
+                                          {[p.propina.nivel, p.propina.turno].filter(Boolean).join(" · ")}
+                                        </p>
+                                      )}
+                                      {p.mes_referencia && (
+                                        <p className="text-xs text-slate-400">{formatMesRef(p.mes_referencia, meses)}</p>
                                       )}
                                       {p.metodo && p.status === "pago" && (
                                         <p className="text-xs text-slate-400 capitalize">{p.metodo}</p>
+                                      )}
+                                      {p.observacao && (
+                                        <p className="text-xs text-slate-400 italic mt-0.5">{p.observacao}</p>
                                       )}
                                     </td>
                                     <td className="px-5 py-3.5 text-slate-500 text-xs">
@@ -869,6 +1021,20 @@ export default function Tesouraria() {
                                     </td>
                                     <td className="px-5 py-3.5 text-right font-semibold text-slate-800">
                                       {fmt(p.valor)} Kz
+                                    </td>
+                                    <td className="px-5 py-3.5 text-right">
+                                      {Number(p.multa_valor) > 0 ? (() => {
+                                        const dias = p.data_vencimento ? Math.max(0, Math.floor((Date.now() - new Date(p.data_vencimento).getTime()) / 86400000)) : 0;
+                                        return (
+                                          <div title={`${p.multa?.nome ?? "Multa"} · ${dias} dias de atraso`}>
+                                            <span className="font-semibold text-red-600">{fmt(p.multa_valor)} Kz</span>
+                                            <p className="text-[10px] text-red-400">+{dias}d</p>
+                                          </div>
+                                        );
+                                      })() : <span className="text-slate-300">—</span>}
+                                    </td>
+                                    <td className="px-5 py-3.5 text-right font-bold text-slate-900">
+                                      {fmt(Number(p.valor) + Number(p.multa_valor || 0))} Kz
                                     </td>
                                     <td className="px-5 py-3.5 text-center">
                                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusCfg[p.status]?.cls || statusCfg.pendente.cls}`}>
@@ -890,14 +1056,33 @@ export default function Tesouraria() {
                                           Confirmar
                                         </button>
                                       )}
-                                      {p.status === "pago" && (
+                                      {p.status === "pago" && loteLeaders.has(p.id) && (
                                         <button
-                                          onClick={() => imprimirRecibo(p, escola)}
-                                          title="Imprimir recibo"
+                                          onClick={async () => {
+                                            // Se faz parte de lote → abre PDF consolidado; senão abre PDF individual
+                                            const url = p.lote_id
+                                              ? `/pagamentos/lote/${p.lote_id}/recibo.pdf`
+                                              : `/pagamentos/${p.id}/recibo.pdf`;
+                                            try {
+                                              const r = await api.get(url, { responseType: "blob" });
+                                              const blob = new Blob([r.data], { type: "application/pdf" });
+                                              const blobUrl = URL.createObjectURL(blob);
+                                              const w = window.open(blobUrl, "_blank");
+                                              if (!w) {
+                                                const a = document.createElement("a");
+                                                a.href = blobUrl; a.download = `recibo.pdf`;
+                                                document.body.appendChild(a); a.click(); a.remove();
+                                              }
+                                            } catch (err) { console.error("Erro ao abrir PDF:", err); }
+                                          }}
+                                          title={p.lote_id ? "Imprimir recibo do lote" : "Imprimir recibo"}
                                           className="text-slate-400 hover:text-blue-600 transition-colors"
                                         >
                                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 inline"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                                         </button>
+                                      )}
+                                      {p.status === "pago" && !loteLeaders.has(p.id) && (
+                                        <span className="text-[10px] text-slate-300 italic" title={`Parte do lote ${p.lote_id}`}>↳ lote</span>
                                       )}
                                     </td>
                                   </tr>
@@ -960,6 +1145,32 @@ export default function Tesouraria() {
                   </select>
                 </div>
               )}
+              {form.tipo === "mensalidade" && propinasList.length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Propina (Precário)</label>
+                  <select value={form.propina_id} onChange={e => {
+                    const p = propinasList.find(x => String(x.id) === e.target.value);
+                    setForm(f => ({ ...f, propina_id: e.target.value, valor: p?.valor_mensal ?? f.valor }));
+                  }}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50">
+                    <option value="">Sem propina (manual)</option>
+                    {propinasList.map(p => <option key={p.id} value={p.id}>{p.nome || p.nivel || "Propina"} — {fmt(p.valor_mensal)} Kz/mês</option>)}
+                  </select>
+                </div>
+              )}
+              {form.tipo === "emolumento" && emolumentosList.length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Emolumento (Precário)</label>
+                  <select value={form.emolumento_id} onChange={e => {
+                    const em = emolumentosList.find(x => String(x.id) === e.target.value);
+                    setForm(f => ({ ...f, emolumento_id: e.target.value, valor: em?.valor ?? f.valor }));
+                  }}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50">
+                    <option value="">Sem emolumento (manual)</option>
+                    {emolumentosList.map(em => <option key={em.id} value={em.id}>{em.nome} — {fmt(em.valor)} Kz</option>)}
+                  </select>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1.5">Valor (Kz) *</label>
@@ -994,7 +1205,9 @@ export default function Tesouraria() {
 
       {/* ─── Modal: Confirmar Pagamento (single) ─── */}
       {confirmId && confirmPag && (() => {
-        const valorAPagar  = Number(confirmPag.valor || 0);
+        const valorBase    = Number(confirmPag.valor || 0);
+        const multaValor   = Number(confirmPag.multa_valor || 0);
+        const valorAPagar  = valorBase + multaValor;
         const entregue     = Number(confirmEntregue || 0);
         const troco        = entregue > 0 ? entregue - valorAPagar : null;
         const saldoCarteira = totalPago - totalPendente;
@@ -1034,7 +1247,13 @@ export default function Tesouraria() {
                     <span className="font-medium text-slate-800">{descricao}</span>
                     <span className="text-slate-500">Vencimento</span>
                     <span className="font-medium text-slate-800">{confirmPag.data_vencimento ? new Date(confirmPag.data_vencimento).toLocaleDateString("pt-AO") : "—"}</span>
-                    <span className="text-slate-500">Valor a Pagar</span>
+                    <span className="text-slate-500">Valor base</span>
+                    <span className="font-medium text-slate-800">{fmt(valorBase)} Kz</span>
+                    {multaValor > 0 && (<>
+                      <span className="text-red-500">Multa{confirmPag.data_vencimento ? ` (${Math.max(0, Math.floor((Date.now() - new Date(confirmPag.data_vencimento).getTime()) / 86400000))} dias)` : ""}</span>
+                      <span className="font-medium text-red-600">+ {fmt(multaValor)} Kz</span>
+                    </>)}
+                    <span className="text-slate-500">Total a Pagar</span>
                     <span className="font-bold text-blue-700 text-base">{fmt(valorAPagar)} Kz</span>
                   </div>
                 </div>
@@ -1095,8 +1314,25 @@ export default function Tesouraria() {
 
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1.5">Método de Pagamento</label>
-                    <MetodoSelector value={confirmMetodo} onChange={setConfirmMetodo} />
+                    <MetodoSelector value={confirmMetodo} onChange={(m) => { setConfirmMetodo(m); setConfirmError(""); }} />
                   </div>
+
+                  {["multicaixa","transferencia","referencia"].includes(confirmMetodo) && (
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1.5">
+                        Nº de Referência <span className="text-red-500">*</span>
+                      </label>
+                      <input value={confirmNumRef} onChange={e => { setConfirmNumRef(e.target.value); setConfirmError(""); }}
+                        placeholder={confirmMetodo === "multicaixa" ? "Ex: 12345678" : confirmMetodo === "transferencia" ? "Ex: 2024-09-15-001" : "Nº de referência"}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50" />
+                    </div>
+                  )}
+
+                  {confirmError && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-xl text-xs">
+                      {confirmError}
+                    </div>
+                  )}
 
                   {entregue > 0 && (
                     <div className={`flex items-center justify-between rounded-xl px-4 py-3 ${troco >= 0 ? "bg-emerald-50 border border-emerald-200" : "bg-red-50 border border-red-200"}`}>
@@ -1130,7 +1366,9 @@ export default function Tesouraria() {
       {/* ─── Modal: Pagar em Massa ─── */}
       {showBulkConfirm && (() => {
         const selecionados  = mensalidadesSorted.filter(m => selectedIds.has(m.id));
-        const totalBulk     = selecionados.reduce((s, p) => s + Number(p.valor || 0), 0);
+        const totalBaseBulk = selecionados.reduce((s, p) => s + Number(p.valor || 0), 0);
+        const totalMultaBulk = selecionados.reduce((s, p) => s + Number(p.multa_valor || 0), 0);
+        const totalBulk     = totalBaseBulk + totalMultaBulk;
         const entregueB     = Number(bulkEntregue || 0);
         const trocoB        = entregueB > 0 ? entregueB - totalBulk : null;
         const saldoCarteira = totalPago - totalPendente;
@@ -1233,8 +1471,23 @@ export default function Tesouraria() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1.5">Método de Pagamento</label>
-                    <MetodoSelector value={bulkMetodo} onChange={setBulkMetodo} />
+                    <MetodoSelector value={bulkMetodo} onChange={(m) => { setBulkMetodo(m); setBulkError(""); }} />
                   </div>
+                  {["multicaixa","transferencia","referencia"].includes(bulkMetodo) && (
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1.5">
+                        Nº de Referência <span className="text-red-500">*</span>
+                      </label>
+                      <input value={bulkNumRef} onChange={e => { setBulkNumRef(e.target.value); setBulkError(""); }}
+                        placeholder={bulkMetodo === "multicaixa" ? "Ex: 12345678" : "Nº de referência"}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50" />
+                    </div>
+                  )}
+                  {bulkError && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-xl text-xs">
+                      {bulkError}
+                    </div>
+                  )}
                   {entregueB > 0 && (
                     <div className={`flex items-center justify-between rounded-xl px-4 py-3 ${trocoB >= 0 ? "bg-emerald-50 border border-emerald-200" : "bg-red-50 border border-red-200"}`}>
                       <span className={`text-sm font-semibold ${trocoB >= 0 ? "text-emerald-700" : "text-red-700"}`}>

@@ -11,20 +11,43 @@ export default function CartaoEstudante() {
   const ANO_REF  = new Date().getFullYear();
   const ANO_ATUAL = `${ANO_REF - 1}-${ANO_REF}`;
 
+  const [cursos,    setCursos]    = useState([]);
+  const [turnos,    setTurnos]    = useState([]);
+  const [classes,   setClasses]   = useState([]);
   const [turmas,    setTurmas]    = useState([]);
   const [alunos,    setAlunos]    = useState([]);
   const [selected,  setSelected]  = useState([]);
   const [loading,   setLoading]   = useState(false);
   const [busca,     setBusca]     = useState("");
 
+  const [cursoSel,  setCursoSel]  = useState("");
+  const [classeSel, setClasseSel] = useState("");
+  const [turnoSel,  setTurnoSel]  = useState("");
   const [filtroTurma,  setFiltroTurma]  = useState("");
   const [filtroAno,    setFiltroAno]    = useState(ANO_ATUAL);
 
   const ANOS = [`${ANO_REF-2}-${ANO_REF-1}`, `${ANO_REF-1}-${ANO_REF}`, `${ANO_REF}-${ANO_REF+1}`];
 
   useEffect(() => {
-    api.get("/turmas").then(r => setTurmas(r.data.data || r.data));
+    api.get("/cursos").then(r => setCursos(r.data.data || r.data)).catch(() => {});
+    api.get("/turnos").then(r => setTurnos(r.data.data || r.data)).catch(() => {});
   }, []);
+
+  // Cascade Curso → Classe
+  useEffect(() => {
+    setClasseSel(""); setFiltroTurma(""); setClasses([]); setTurmas([]);
+    if (!cursoSel) return;
+    api.get(`/classes?curso_id=${cursoSel}`).then(r => setClasses(r.data)).catch(() => {});
+  }, [cursoSel]);
+
+  // Cascade Classe (+ Turno) → Turmas
+  useEffect(() => {
+    setFiltroTurma("");
+    if (!classeSel) { setTurmas([]); return; }
+    const params = new URLSearchParams({ classe_id: classeSel });
+    if (turnoSel) params.append("turno_id", turnoSel);
+    api.get(`/turmas?${params}`).then(r => setTurmas(r.data)).catch(() => {});
+  }, [classeSel, turnoSel]);
 
   useEffect(() => {
     if (!filtroTurma) { setAlunos([]); setSelected([]); return; }
@@ -82,44 +105,62 @@ export default function CartaoEstudante() {
       </div>
 
       {/* Filtros */}
-      <div className="bg-white rounded-xl shadow-sm p-5 mb-5 flex flex-wrap gap-4 items-end">
-        <div className="flex-1 min-w-48">
-          <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Turma *</label>
-          <select
-            value={filtroTurma}
-            onChange={e => setFiltroTurma(e.target.value)}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-          >
-            <option value="">Seleccionar turma...</option>
-            {turmas.map(t => (
-              <option key={t.id} value={t.id}>{t.nome}</option>
-            ))}
-          </select>
-        </div>
-        <div className="min-w-40">
-          <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Ano Lectivo</label>
-          <select
-            value={filtroAno}
-            onChange={e => setFiltroAno(e.target.value)}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-          >
-            {ANOS.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </div>
-        {alunos.length > 0 && (
-          <div className="flex-1 min-w-48">
-            <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Pesquisar</label>
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                value={busca}
-                onChange={e => setBusca(e.target.value)}
-                placeholder="Nome ou número..."
-                className="w-full border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
+      <div className="bg-white rounded-xl shadow-sm p-5 mb-5 space-y-3">
+        {/* Cascada: Curso → Classe → Turno → Turma */}
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Curso *</label>
+            <select value={cursoSel} onChange={e => setCursoSel(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+              <option value="">Seleccionar...</option>
+              {cursos.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
           </div>
-        )}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Classe *</label>
+            <select value={classeSel} onChange={e => setClasseSel(e.target.value)} disabled={!cursoSel}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-50">
+              <option value="">{cursoSel ? "Seleccionar..." : "← Curso"}</option>
+              {classes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Turno</label>
+            <select value={turnoSel} onChange={e => setTurnoSel(e.target.value)} disabled={!classeSel}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-50">
+              <option value="">Todos</option>
+              {turnos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Turma *</label>
+            <select value={filtroTurma} onChange={e => setFiltroTurma(e.target.value)} disabled={!classeSel}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-50">
+              <option value="">{classeSel ? (turmas.length ? "Seleccionar..." : "Sem turmas") : "← Classe"}</option>
+              {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}{t.turnoObj ? ` · ${t.turnoObj.nome}` : ""}</option>)}
+            </select>
+          </div>
+        </div>
+        {/* Linha 2: Ano + Pesquisa */}
+        <div className="flex flex-wrap gap-4 items-end">
+          <div className="min-w-40">
+            <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Ano Lectivo</label>
+            <select value={filtroAno} onChange={e => setFiltroAno(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+              {ANOS.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+          {alunos.length > 0 && (
+            <div className="flex-1 min-w-48">
+              <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Pesquisar</label>
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Nome ou número..."
+                  className="w-full border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"/>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Estado inicial */}

@@ -6,9 +6,10 @@ return [
     "tenant_model" => Escola::class,
     "id_generator" => Stancl\Tenancy\Database\Concerns\HasUlids::class,
     "domain_model" => Domain::class,
-    "central_domains" => [
-        env("CENTRAL_DOMAIN", "educa.okulandisa.com"),
-    ],
+    "central_domains" => array_values(array_filter(array_map(
+        "trim",
+        explode(",", env("CENTRAL_DOMAIN", "educa.okulandisa.com"))
+    ))),
     "tenancy_bootstrappers" => [
         Stancl\Tenancy\Bootstrappers\DatabaseTenancyBootstrapper::class,
     ],
@@ -37,7 +38,7 @@ return [
     "features" => [],
     "migration_parameters" => [
         "--force" => true,
-        "--path" => "/database/migrations/tenant",
+        "--path" => database_path("migrations/tenant"),
         "--realpath" => true,
     ],
     "seeder_parameters" => ["--class" => "DatabaseSeeder"],

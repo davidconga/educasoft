@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { Save, Upload, Building2, CheckCircle, AlertCircle } from "lucide-react";
 import api from "../../services/api";
+import { useAuthStore } from "../../store/auth";
+import SaftButton from "../../components/SaftButton";
 
 const inp = "w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50";
 
 export default function ConfiguracaoEscola() {
-  const [form, setForm]       = useState({ nome:"", email:"", telefone:"", endereco:"" });
+  const updateEscola = useAuthStore(s => s.updateEscola);
+  const [form, setForm]       = useState({ nome:"", email:"", nif:"", telefone:"", endereco:"" });
   const [logo, setLogo]       = useState(null);
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -17,7 +20,7 @@ export default function ConfiguracaoEscola() {
   useEffect(() => {
     api.get("/configuracoes/escola")
       .then(r => {
-        setForm({ nome: r.data.nome || "", email: r.data.email || "", telefone: r.data.telefone || "", endereco: r.data.endereco || "" });
+        setForm({ nome: r.data.nome || "", email: r.data.email || "", nif: r.data.nif || "", telefone: r.data.telefone || "", endereco: r.data.endereco || "" });
         if (r.data.logo) setPreview(`/storage/${r.data.logo}`);
       })
       .finally(() => setLoading(false));
@@ -32,7 +35,8 @@ export default function ConfiguracaoEscola() {
     e.preventDefault();
     setSaving(true);
     try {
-      await api.put("/configuracoes/escola", form);
+      const r = await api.put("/configuracoes/escola", form);
+      updateEscola(r.data || form);
       showMsg("Dados da escola actualizados com sucesso.");
     } catch (err) {
       showMsg(err.response?.data?.message || "Erro ao guardar.", "error");
@@ -52,7 +56,8 @@ export default function ConfiguracaoEscola() {
     const fd = new FormData();
     fd.append("logo", logo);
     try {
-      await api.post("/configuracoes/escola/logo", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      const r = await api.post("/configuracoes/escola/logo", fd);
+      updateEscola({ logo: r.data?.logo });
       showMsg("Logo actualizado com sucesso.");
       setLogo(null);
     } catch (err) {
@@ -64,9 +69,12 @@ export default function ConfiguracaoEscola() {
 
   return (
     <div className="max-w-2xl space-y-6">
-      <div className="flex items-center gap-3">
-        <Building2 size={22} className="text-blue-600" />
-        <h1 className="text-2xl font-bold text-slate-800">Dados da Escola</h1>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Building2 size={22} className="text-blue-600" />
+          <h1 className="text-2xl font-bold text-slate-800">Dados da Escola</h1>
+        </div>
+        <SaftButton variant="outline"/>
       </div>
 
       {msg && (
@@ -128,6 +136,11 @@ export default function ConfiguracaoEscola() {
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1.5">Telefone</label>
             <input value={form.telefone} onChange={e => setForm(f => ({ ...f, telefone: e.target.value }))} className={inp} placeholder="+244 9xx xxx xxx" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1.5">NIF (fiscal)</label>
+            <input value={form.nif} onChange={e => setForm(f => ({ ...f, nif: e.target.value }))} className={inp} placeholder="Ex: 5417000000" />
+            <p className="text-xs text-slate-400 mt-1">Usado nos recibos fiscais e na exportação SAFT-AO</p>
           </div>
         </div>
 

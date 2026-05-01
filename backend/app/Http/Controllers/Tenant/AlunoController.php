@@ -2,6 +2,7 @@
 namespace App\Http\Controllers\Tenant;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant\Aluno;
+use App\Models\Tenant\AlunoDocumento;
 use App\Models\Tenant\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -51,13 +52,21 @@ class AlunoController extends Controller {
     }
 
     public function show(Aluno $aluno) {
-        return response()->json($aluno->load("user","matriculas.turma.classe.curso","matriculas.turma.turnoObj","notas.disciplina","pagamentos.plano"));
+        return response()->json($aluno->load("user","documento","matriculas.turma.classe.curso","matriculas.turma.turnoObj","notas.disciplina","pagamentos.plano"));
     }
 
     public function update(Request $request, Aluno $aluno) {
-        $aluno->update($request->only(["data_nascimento","genero","naturalidade","bi","nome_pai","nome_mae","telefone_responsavel","endereco"]));
+        $aluno->update($request->only(["data_nascimento","genero","naturalidade","nacionalidade","bi","nome_pai","nome_mae","telefone_responsavel","endereco"]));
         $aluno->user->update($request->only(["nome","email","telefone"]));
-        return response()->json(["message"=>"Aluno actualizado.","aluno"=>$aluno->load($this->relations())]);
+
+        // Documento extendido — upsert se vier no payload
+        $docInput = $request->input("documento");
+        if (is_array($docInput)) {
+            $payload = array_intersect_key($docInput, array_flip(AlunoDocumento::inputFields()));
+            AlunoDocumento::updateOrCreate(["aluno_id" => $aluno->id], $payload);
+        }
+
+        return response()->json(["message"=>"Aluno actualizado.","aluno"=>$aluno->load(array_merge($this->relations(), ["documento"]))]);
     }
 
     public function uploadFoto(Request $request, Aluno $aluno) {

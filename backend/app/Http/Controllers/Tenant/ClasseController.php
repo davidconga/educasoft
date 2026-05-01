@@ -28,4 +28,21 @@ class ClasseController extends Controller {
         $classe->delete();
         return response()->json(["message" => "Classe eliminada."]);
     }
+
+    /** Disciplinas (catálogo global) que estão no plano curricular desta classe (match por código ou nome). */
+    public function disciplinas(Classe $classe) {
+        $planoEntries = \App\Models\Tenant\CursoDisciplina::where("classe_id", $classe->id)->get();
+        if ($planoEntries->isEmpty()) {
+            return response()->json([]);
+        }
+        $codigos = $planoEntries->pluck("codigo")->filter()->unique()->values();
+        $nomes   = $planoEntries->pluck("nome")->filter()->unique()->values();
+
+        $query = \App\Models\Tenant\Disciplina::query();
+        $query->where(function ($q) use ($codigos, $nomes) {
+            if ($codigos->isNotEmpty()) $q->orWhereIn("codigo", $codigos);
+            if ($nomes->isNotEmpty())   $q->orWhereIn("nome",   $nomes);
+        });
+        return response()->json($query->orderBy("nome")->get());
+    }
 }

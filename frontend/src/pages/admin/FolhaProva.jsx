@@ -20,7 +20,7 @@ function gerarCodigoFolha() {
 function gerarFolhaProva(cfg, escola, folhas, tenantId) {
   const baseUrl    = window.location.origin;
   const logoUrl    = escola?.logo ? `${baseUrl}/storage/${escola.logo}` : null;
-  const escolaNome = escola?.nome || "EduSoft";
+  const escolaNome = escola?.nome || "Educajá";
 
   const dataPretty = cfg.data
     ? new Date(cfg.data + "T12:00:00").toLocaleDateString("pt-AO", { day: "2-digit", month: "long", year: "numeric" })

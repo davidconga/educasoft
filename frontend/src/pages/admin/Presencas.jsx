@@ -132,6 +132,69 @@ function printRelatorio({ turmas, disciplinas, turmaId, discId, dataInicio, data
 }
 
 /* ── TAB A: Registo Diário ── */
+/* Cascade Curso → Classe → Turno → Turma — reutilizável */
+function CascadaTurma({ turmaId, setTurmaId }) {
+  const [cursos,  setCursos]  = useState([]);
+  const [turnos,  setTurnos]  = useState([]);
+  const [classes, setClasses] = useState([]);
+  const [turmas,  setTurmas]  = useState([]);
+  const [cursoSel,  setCursoSel]  = useState("");
+  const [classeSel, setClasseSel] = useState("");
+  const [turnoSel,  setTurnoSel]  = useState("");
+
+  useEffect(() => {
+    api.get("/cursos").then(r => setCursos(r.data.data || r.data)).catch(() => {});
+    api.get("/turnos").then(r => setTurnos(r.data.data || r.data)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setClasseSel(""); setTurmaId(""); setClasses([]); setTurmas([]);
+    if (!cursoSel) return;
+    api.get(`/classes?curso_id=${cursoSel}`).then(r => setClasses(r.data)).catch(() => {});
+  }, [cursoSel]);
+
+  useEffect(() => {
+    setTurmaId("");
+    if (!classeSel) { setTurmas([]); return; }
+    const params = new URLSearchParams({ classe_id: classeSel });
+    if (turnoSel) params.append("turno_id", turnoSel);
+    api.get(`/turmas?${params}`).then(r => setTurmas(r.data)).catch(() => {});
+  }, [classeSel, turnoSel]);
+
+  return (
+    <>
+      <div>
+        <label className="block text-xs font-medium text-slate-500 mb-1">Curso *</label>
+        <select value={cursoSel} onChange={e => setCursoSel(e.target.value)} className={sel}>
+          <option value="">Seleccionar...</option>
+          {cursos.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-slate-500 mb-1">Classe *</label>
+        <select value={classeSel} onChange={e => setClasseSel(e.target.value)} disabled={!cursoSel} className={`${sel} disabled:opacity-50`}>
+          <option value="">{cursoSel ? "Seleccionar..." : "← Curso"}</option>
+          {classes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-slate-500 mb-1">Turno</label>
+        <select value={turnoSel} onChange={e => setTurnoSel(e.target.value)} disabled={!classeSel} className={`${sel} disabled:opacity-50`}>
+          <option value="">Todos</option>
+          {turnos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-slate-500 mb-1">Turma *</label>
+        <select value={turmaId} onChange={e => setTurmaId(e.target.value)} disabled={!classeSel} className={`${sel} disabled:opacity-50`}>
+          <option value="">{classeSel ? (turmas.length ? "Seleccionar..." : "Sem turmas") : "← Classe"}</option>
+          {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}{t.turnoObj ? ` · ${t.turnoObj.nome}` : ""}</option>)}
+        </select>
+      </div>
+    </>
+  );
+}
+
 function RegistoDiario({ turmas, disciplinas, escolaNome, logoUrl }) {
   const [turmaId, setTurmaId] = useState("");
   const [discId,  setDiscId]  = useState("");
@@ -184,15 +247,11 @@ function RegistoDiario({ turmas, disciplinas, escolaNome, logoUrl }) {
   return (
     <div className="space-y-4">
       {/* Filtros */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Turma *</label>
-            <select value={turmaId} onChange={e => { setTurmaId(e.target.value); setDiscId(""); }} className={sel}>
-              <option value="">Seleccionar...</option>
-              {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-            </select>
-          </div>
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <CascadaTurma turmaId={turmaId} setTurmaId={(id) => { setTurmaId(id); setDiscId(""); }} />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">Disciplina (opcional)</label>
             <select value={discId} onChange={e => setDiscId(e.target.value)} disabled={!turmaId} className={`${sel} disabled:opacity-50`}>
@@ -329,15 +388,11 @@ function Relatorio({ turmas, disciplinas, escolaNome, logoUrl }) {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Turma *</label>
-            <select value={turmaId} onChange={e => { setTurmaId(e.target.value); setDiscId(""); }} className={sel}>
-              <option value="">Seleccionar...</option>
-              {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-            </select>
-          </div>
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <CascadaTurma turmaId={turmaId} setTurmaId={(id) => { setTurmaId(id); setDiscId(""); }} />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">Disciplina</label>
             <select value={discId} onChange={e => setDiscId(e.target.value)} disabled={!turmaId} className={`${sel} disabled:opacity-50`}>

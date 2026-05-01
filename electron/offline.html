@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sem ligação</title>
+  <style>
+    body { margin: 0; display: flex; align-items: center; justify-content: center;
+           min-height: 100vh; font-family: system-ui, sans-serif;
+           background: linear-gradient(135deg, #1e3a8a, #1d4ed8); color: #fff; }
+    .box { text-align: center; padding: 40px; }
+    h1 { font-size: 1.8rem; margin-bottom: 8px; }
+    p  { color: #93c5fd; margin-bottom: 24px; }
+    button { background: #fff; color: #1d4ed8; border: none; padding: 12px 28px;
+             border-radius: 10px; font-size: 1rem; font-weight: 600; cursor: pointer; }
+    button:hover { background: #dbeafe; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>Sem ligação à internet</h1>
+    <p>Verifique a sua ligação e tente novamente.</p>
+    <button onclick="window.location.reload()">Tentar novamente</button>
+  </div>
+</body>
+</html>

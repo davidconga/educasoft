@@ -2,44 +2,96 @@
 namespace App\Http\Controllers\Tenant;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant\PresencaProfessor;
-use App\Models\Tenant\Professor;
+use App\Models\Tenant\Horario;
 use Illuminate\Http\Request;
 
 class PresencaProfessorController extends Controller {
+
+    private static array $DIA_MAP = [
+        1 => 'segunda', 2 => 'terca', 3 => 'quarta',
+        4 => 'quinta',  5 => 'sexta', 6 => 'sabado', 7 => 'domingo',
+    ];
+
+    private function minutosEntre(string $inicio, string $fim): int {
+        [$hi, $mi] = array_map('intval', explode(':', $inicio));
+        [$hf, $mf] = array_map('intval', explode(':', $fim));
+        return max(0, ($hf * 60 + $mf) - ($hi * 60 + $mi));
+    }
+
+    private function hhmm(string $t): string {
+        return substr($t, 0, 5);
+    }
 
     /** GET /presencas/professores?data=YYYY-MM-DD */
     public function index(Request $request) {
         $request->validate(['data' => 'required|date']);
 
-        $professores = Professor::with('user')->get()->sortBy('user.nome')->values();
-        $presencas   = PresencaProfessor::where('data', $request->data)->get()->keyBy('professor_id');
+        $diaN    = (int) date('N', strtotime($request->data));
+        $diaSem  = self::$DIA_MAP[$diaN] ?? null;
 
-        $rows = $professores->map(function ($prof, $idx) use ($presencas) {
-            $p = $presencas->get($prof->id);
+        $horarios = $diaSem
+            ? Horario::with('professor.user', 'disciplina', 'turma')
+                ->where('dia_semana', $diaSem)
+                ->orderBy('hora_inicio')
+                ->get()
+            : collect();
+
+        $presencas = PresencaProfessor::where('data', $request->data)
+            ->whereNotNull('horario_id')
+            ->get()
+            ->keyBy('horario_id');
+
+        $aulas = $horarios->map(function ($h) use ($presencas) {
+            $p = $presencas->get($h->id);
             return [
-                'ord'          => $idx + 1,
-                'professor_id' => $prof->id,
-                'nome'         => $prof->user?->nome,
-                'numero'       => $prof->numero_professor,
-                'estado'       => $p?->estado ?? 'presente',
-                'observacao'   => $p?->observacao ?? '',
+                'horario_id'       => $h->id,
+                'professor_id'     => $h->professor_id,
+                'professor_nome'   => $h->professor?->user?->nome,
+                'professor_numero' => $h->professor?->numero_professor,
+                'disciplina'       => $h->disciplina?->nome,
+                'turma'            => $h->turma?->nome,
+                'hora_inicio'      => $h->hora_inicio,
+                'hora_fim'         => $h->hora_fim,
+                'minutos'          => $this->minutosEntre($h->hora_inicio, $h->hora_fim),
+                'estado'           => $p?->estado ?? 'presente',
+                'observacao'       => $p?->observacao ?? '',
             ];
-        });
+        })->values();
 
-        return response()->json(['professores' => $rows]);
+        return response()->json([
+            'data'       => $request->data,
+            'dia_semana' => $diaSem,
+            'aulas'      => $aulas,
+        ]);
     }
 
     /** POST /presencas/professores/bulk */
     public function storeBulk(Request $request) {
         $request->validate([
-            'data'      => 'required|date',
-            'presencas' => 'required|array',
+            'data'               => 'required|date',
+            'presencas'          => 'required|array',
+            'presencas.*.professor_id' => 'required|exists:professores,id',
+            'presencas.*.horario_id'   => 'required|exists:horarios,id',
+            'presencas.*.estado'       => 'required|in:presente,falta_justificada,falta_injustificada',
         ]);
 
         foreach ($request->presencas as $item) {
+            $estado    = $item['estado'];
+            $hiInicio  = $item['hora_inicio'] ?? null;
+            $hiFim     = $item['hora_fim']    ?? null;
+            $minutos   = ($estado === 'presente' && $hiInicio && $hiFim)
+                ? $this->minutosEntre($hiInicio, $hiFim)
+                : 0;
+
             PresencaProfessor::updateOrCreate(
-                ['professor_id' => $item['professor_id'], 'data' => $request->data],
-                ['estado' => $item['estado'] ?? 'presente', 'observacao' => $item['observacao'] ?? null]
+                ['professor_id' => $item['professor_id'], 'horario_id' => $item['horario_id'], 'data' => $request->data],
+                [
+                    'estado'             => $estado,
+                    'hora_inicio'        => $hiInicio,
+                    'hora_fim'           => $hiFim,
+                    'minutos_lecionados' => $minutos,
+                    'observacao'         => $item['observacao'] ?? null,
+                ]
             );
         }
 
@@ -50,25 +102,32 @@ class PresencaProfessorController extends Controller {
     public function relatorio(Request $request) {
         $request->validate(['data_inicio' => 'required|date', 'data_fim' => 'required|date']);
 
-        $professores = Professor::with('user')->get()->sortBy('user.nome')->values();
-        $presencas   = PresencaProfessor::whereBetween('data', [$request->data_inicio, $request->data_fim])
-            ->get()->groupBy('professor_id');
+        $presencas = PresencaProfessor::with('professor.user')
+            ->whereBetween('data', [$request->data_inicio, $request->data_fim])
+            ->whereNotNull('horario_id')
+            ->get()
+            ->groupBy('professor_id');
 
-        $rows = $professores->map(function ($prof, $idx) use ($presencas) {
-            $lista     = $presencas->get($prof->id, collect());
+        $rows = $presencas->map(function ($lista, $profId) {
+            $prof      = $lista->first()?->professor;
             $total     = $lista->count();
             $presentes = $lista->where('estado', 'presente')->count();
             return [
-                'ord'           => $idx + 1,
-                'professor_id'  => $prof->id,
-                'nome'          => $prof->user?->nome,
-                'numero'        => $prof->numero_professor,
-                'total_dias'    => $total,
-                'presentes'     => $presentes,
-                'faltas_just'   => $lista->where('estado', 'falta_justificada')->count(),
-                'faltas_injust' => $lista->where('estado', 'falta_injustificada')->count(),
-                'percentagem'   => $total > 0 ? round($presentes / $total * 100, 1) : null,
+                'professor_id'      => $profId,
+                'nome'              => $prof?->user?->nome,
+                'numero'            => $prof?->numero_professor,
+                'total_aulas'       => $total,
+                'presentes'         => $presentes,
+                'faltas_just'       => $lista->where('estado', 'falta_justificada')->count(),
+                'faltas_injust'     => $lista->where('estado', 'falta_injustificada')->count(),
+                'minutos_lecionados'=> (int) $lista->sum('minutos_lecionados'),
+                'percentagem'       => $total > 0 ? round($presentes / $total * 100, 1) : null,
             ];
+        })->sortBy('nome')->values();
+
+        // add ord
+        $rows = $rows->values()->map(function ($r, $i) {
+            return array_merge(['ord' => $i + 1], $r);
         });
 
         return response()->json([

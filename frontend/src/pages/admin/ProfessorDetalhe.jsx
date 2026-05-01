@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Mail, Phone, BookOpen, Calendar, GraduationCap,
-  AlertCircle, KeyRound, Eye, EyeOff, CheckCircle, RotateCcw, Users,
+  AlertCircle, KeyRound, Eye, EyeOff, CheckCircle, RotateCcw, Users, Camera,
 } from "lucide-react";
 import api from "../../services/api";
 
@@ -13,6 +13,51 @@ const normDia = d =>
     .replace(/ç/g,"c").replace(/ã/g,"a").replace(/ê/g,"e").replace(/é/g,"e").replace(/á/g,"a").replace(/\s/g,"");
 
 const inp = "w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50";
+
+function FotoAvatar({ professor, onChanged, initials }) {
+  const ref = useRef();
+  const [uploading, setUploading] = useState(false);
+  const fotoUrl = professor.foto ? `/storage/${professor.foto}?t=${professor._bust ?? Date.now()}` : null;
+
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("foto", file);
+      const r = await api.post(`/professores/${professor.id}/foto`, fd);
+      onChanged?.(r.data.foto);
+    } catch (err) {
+      alert(err.response?.data?.message || "Erro ao enviar foto.");
+    } finally {
+      setUploading(false);
+      if (ref.current) ref.current.value = "";
+    }
+  };
+
+  return (
+    <div className="relative shrink-0 cursor-pointer group" onClick={() => ref.current?.click()}>
+      <input ref={ref} type="file" accept="image/*" className="hidden" onChange={handleFile}/>
+      <div className="w-16 h-16 rounded-2xl overflow-hidden flex items-center justify-center text-white text-xl font-bold shadow-md shadow-emerald-200">
+        {fotoUrl ? (
+          <img src={fotoUrl} alt={professor.user?.nome} className="w-full h-full object-cover"/>
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+            {initials}
+          </div>
+        )}
+      </div>
+      <div className="absolute inset-0 rounded-2xl bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+        {uploading ? (
+          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"/>
+        ) : (
+          <Camera size={18} className="text-white"/>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function InfoRow({ icon: Icon, label, value }) {
   if (!value) return null;
@@ -176,9 +221,7 @@ export default function ProfessorDetalhe() {
 
       {/* Hero */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 flex items-center gap-6">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-xl font-bold shadow-md shadow-emerald-200 shrink-0">
-          {initials}
-        </div>
+        <FotoAvatar professor={prof} onChanged={(p) => setProf(s => ({...s, foto: p}))} initials={initials}/>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-xl font-bold text-slate-800">{nome}</h1>

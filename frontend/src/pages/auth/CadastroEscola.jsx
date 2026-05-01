@@ -132,7 +132,7 @@ export default function CadastroEscola() {
             <p className="text-sm text-blue-600"><span className="font-medium">Código:</span> {resultado.codigo}</p>
             <p className="text-sm text-blue-600"><span className="font-medium">Plano:</span> {planoSelecionado?.nome}</p>
           </div>
-          <p className="text-xs text-gray-400 mb-6">Receberá uma notificação quando a sua conta for activada pela equipa EduSoft.</p>
+          <p className="text-xs text-gray-400 mb-6">Receberá uma notificação quando a sua conta for activada pela equipa Educajá.</p>
           <Link to="/login" className="block w-full bg-blue-800 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 transition-colors">
             Ir para o Login →
           </Link>
@@ -147,7 +147,7 @@ export default function CadastroEscola() {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-3 text-white text-3xl">🎓</div>
-          <h1 className="text-3xl font-bold text-white">EduSoft</h1>
+          <h1 className="text-3xl font-bold text-white">Educajá</h1>
           <p className="text-blue-200 text-sm mt-1">Registe a sua escola gratuitamente</p>
         </div>
 
@@ -411,7 +411,7 @@ export default function CadastroEscola() {
                 </div>
               </div>
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700 mb-6">
-                Ao submeter, o seu pedido será analisado pela equipa EduSoft. Receberá uma notificação quando a conta for activada.
+                Ao submeter, o seu pedido será analisado pela equipa Educajá. Receberá uma notificação quando a conta for activada.
               </div>
               <div className="flex justify-between">
                 <button onClick={() => setStep(2)} className="border border-gray-300 text-gray-700 px-6 py-2.5 rounded-xl hover:bg-gray-50 font-medium">

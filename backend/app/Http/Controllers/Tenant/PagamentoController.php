@@ -7,6 +7,10 @@ use App\Models\Tenant\Pagamento;
 use App\Models\Tenant\PlanoPagamento;
 use App\Models\Tenant\PrecarioPropina;
 use App\Models\Tenant\PrecarioEmolumento;
+use App\Models\Tenant\PrecarioMulta;
+use App\Services\Tenant\FacturaSigner;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 class PagamentoController extends Controller {
@@ -23,25 +27,110 @@ class PagamentoController extends Controller {
             $alunoIds = Matricula::where("turma_id", $request->turma_id)->pluck("aluno_id");
             $query->whereIn("aluno_id", $alunoIds);
         }
-        return response()->json($query->orderBy("created_at","desc")->paginate($request->per_page ?? 20));
+        $pagamentos = $query->orderBy("created_at","desc")->paginate($request->per_page ?? 20);
+        $this->inferirPropinasEmFalta($pagamentos->getCollection());
+        $this->aplicarMultas($pagamentos->getCollection());
+        return response()->json($pagamentos);
+    }
+
+    /**
+     * Calcula a multa por atraso para cada pagamento (não pago) com data_vencimento ultrapassada,
+     * aplicando a regra de PrecarioMulta compatível com o escopo. Anexa via setAttribute (não persiste).
+     */
+    private function aplicarMultas($pagamentos): void {
+        $multas = PrecarioMulta::where("ativo", true)->get();
+        if ($multas->isEmpty()) return;
+        $hoje = Carbon::today();
+
+        foreach ($pagamentos as $pag) {
+            if ($pag->status === "pago" || $pag->status === "cancelado" || $pag->status === "estornado") continue;
+            if (!$pag->data_vencimento) continue;
+            $dv = Carbon::parse($pag->data_vencimento);
+            $diasAtraso = $hoje->diffInDays($dv, false) * -1; // positivo = em atraso
+            if ($diasAtraso <= 0) continue;
+
+            $multa = $multas->first(function ($m) use ($pag, $diasAtraso) {
+                if ($m->aplicar_em && $m->aplicar_em !== $pag->tipo) return false;
+                if ($diasAtraso < (int)($m->dias_carencia ?? 0)) return false;
+                return true;
+            });
+            if (!$multa) continue;
+
+            $valor = strtolower($multa->tipo_calculo) === "percentagem"
+                ? round((float)$pag->valor * (float)$multa->valor / 100, 2)
+                : (float)$multa->valor;
+
+            // Apenas colunas reais — qualquer outra propriedade via __set viraria atributo
+            // e o Eloquent tentaria gravá-la em colunas que não existem (SQL error).
+            $pag->multa_valor = $valor;
+            $pag->multa_id    = $multa->id;
+            // A relação não vai como atributo, então é seguro anexar para a UI ler propina/multa
+            $pag->setRelation("multa", $multa);
+        }
+    }
+
+    /**
+     * Fallback: para pagamentos sem propina_id, infere uma propina compatível
+     * com a classe/curso do aluno e anexa via setRelation (sem persistir).
+     * Aplica-se in-place na collection passada.
+     */
+    private function inferirPropinasEmFalta($pagamentos): void {
+        $semPropina = $pagamentos->filter(fn($p) => $p->tipo === "mensalidade" && empty($p->propina_id));
+        if ($semPropina->isEmpty()) return;
+
+        $alunoIds = $semPropina->pluck("aluno_id")->filter()->unique()->values();
+        $matriculasPorAluno = Matricula::with("turma.classe")
+            ->whereIn("aluno_id", $alunoIds)
+            ->orderByRaw("FIELD(status,'activa','pendente','concluida','reprovada','transferida','cancelada')")
+            ->get()
+            ->groupBy("aluno_id");
+
+        $todasPropinas = PrecarioPropina::all();
+
+        foreach ($semPropina as $pag) {
+            $matricula = ($matriculasPorAluno[$pag->aluno_id] ?? collect())->first();
+            $classe    = $matricula?->turma?->classe?->nome;
+            $cursoId   = $matricula?->turma?->classe?->curso_id;
+
+            $candidatas = $todasPropinas->filter(function ($p) use ($classe, $cursoId) {
+                $okClasse = !$p->nivel    || $p->nivel === $classe;
+                $okCurso  = !$p->curso_id || ($cursoId && (int)$p->curso_id === (int)$cursoId);
+                return $okClasse && $okCurso;
+            });
+
+            $best = $candidatas->sortByDesc(function ($p) use ($classe, $cursoId) {
+                $score = 0;
+                if ($classe && $p->nivel === $classe)      $score += 4;
+                if ($cursoId && (int)$p->curso_id === (int)$cursoId) $score += 2;
+                if ($p->ano_letivo)                        $score += 1;
+                return $score;
+            })->first();
+
+            if ($best) $pag->setRelation("propina", $best);
+        }
     }
 
     public function store(Request $request) {
         $request->validate([
-            "aluno_id" => "required|exists:alunos,id",
-            "valor"    => "required|numeric",
-            "tipo"     => "required",
+            "aluno_id"      => "required|exists:alunos,id",
+            "valor"         => "required|numeric",
+            "tipo"          => "required",
+            "propina_id"    => "nullable|exists:precario_propinas,id",
+            "emolumento_id" => "nullable|exists:precario_emolumentos,id",
+            "plano_id"      => "nullable|exists:planos_pagamento,id",
         ]);
         $data = array_merge(
             $request->only(["aluno_id","valor","tipo","mes_referencia","metodo","data_vencimento","observacao"]),
             [
-                "plano_id"   => $request->plano_id ?: null,
-                "referencia" => "PAG-".strtoupper(Str::random(8)),
-                "status"     => "pendente",
+                "plano_id"      => $request->plano_id      ?: null,
+                "propina_id"    => $request->propina_id    ?: null,
+                "emolumento_id" => $request->emolumento_id ?: null,
+                "referencia"    => "PAG-".strtoupper(Str::random(8)),
+                "status"        => "pendente",
             ]
         );
         $pag = Pagamento::create($data);
-        return response()->json($pag->load("aluno.user","plano"), 201);
+        return response()->json($pag->load("aluno.user","plano","propina","emolumento"), 201);
     }
 
     public function show(Pagamento $pagamento) {
@@ -50,23 +139,49 @@ class PagamentoController extends Controller {
 
     public function pagar(Request $request, Pagamento $pagamento) {
         $request->validate([
-            "metodo"         => "required",
-            "data_pagamento" => "required|date",
-            "comprovativo"   => "nullable|file|mimes:pdf,jpg,jpeg,png|max:5120",
+            "metodo"                 => "required",
+            "data_pagamento"         => "required|date",
+            "num_referencia_externa" => "required_if:metodo,multicaixa,transferencia,referencia|nullable|string|max:100",
+            "comprovativo"           => "nullable|file|mimes:pdf,jpg,jpeg,png|max:5120",
+        ], [
+            "num_referencia_externa.required_if" => "Para método :input, é obrigatório indicar o nº de referência.",
         ]);
+
+        // Calcular multa no momento do pagamento (só se ainda não estava persistida)
+        if ($pagamento->multa_valor <= 0) {
+            $coll = collect([$pagamento]);
+            $this->aplicarMultas($coll);
+            if (($pagamento->multa_valor ?? 0) > 0) {
+                $pagamento->multa_valor = $pagamento->multa_valor;
+                $pagamento->multa_id    = $pagamento->multa_id;
+            }
+        }
+
         $data = [
-            "status"         => "pago",
-            "metodo"         => $request->metodo,
-            "data_pagamento" => $request->data_pagamento,
+            "status"                 => "pago",
+            "metodo"                 => $request->metodo,
+            "data_pagamento"         => $request->data_pagamento,
+            "num_referencia_externa" => $request->num_referencia_externa,
+            "multa_valor"            => (float)($pagamento->multa_valor ?? 0),
+            "multa_id"               => $pagamento->multa_id ?? null,
+            "valor_entregue"         => $request->filled("valor_entregue") ? (float)$request->valor_entregue : null,
         ];
         if ($request->hasFile("comprovativo")) {
             $data["comprovativo"] = $request->file("comprovativo")->store("comprovativos", "public");
         }
         $pagamento->update($data);
 
-        // Troco → regista como crédito na carteira do aluno
+        // Assina a factura com a chave única da plataforma Educajá
+        try {
+            (new FacturaSigner())->signPagamento($pagamento->fresh());
+        } catch (\Throwable $e) {
+            Log::warning("Falha ao assinar factura {$pagamento->id}: " . $e->getMessage());
+        }
+
+        // Troco → regista como crédito na carteira do aluno (considera multa no total devido)
         if ($request->filled('valor_entregue')) {
-            $troco = (float) $request->valor_entregue - (float) $pagamento->valor;
+            $totalDevido = (float) $pagamento->valor + (float) ($pagamento->multa_valor ?? 0);
+            $troco = (float) $request->valor_entregue - $totalDevido;
             if ($troco > 0.009) {
                 Pagamento::create([
                     'aluno_id'       => $pagamento->aluno_id,
@@ -89,21 +204,51 @@ class PagamentoController extends Controller {
 
     public function pagarMultiplos(Request $request) {
         $request->validate([
-            "ids"            => "required|array|min:1",
-            "ids.*"          => "integer|exists:pagamentos,id",
-            "metodo"         => "required",
-            "data_pagamento" => "required|date",
+            "ids"                    => "required|array|min:1",
+            "ids.*"                  => "integer|exists:pagamentos,id",
+            "metodo"                 => "required",
+            "data_pagamento"         => "required|date",
+            "num_referencia_externa" => "required_if:metodo,multicaixa,transferencia,referencia|nullable|string|max:100",
+        ], [
+            "num_referencia_externa.required_if" => "Para método :input, é obrigatório indicar o nº de referência.",
         ]);
-        Pagamento::whereIn("id", $request->ids)
-            ->where("status", "pendente")
-            ->update(["status" => "pago", "metodo" => $request->metodo, "data_pagamento" => $request->data_pagamento]);
+        // Carrega os pagamentos pendentes para calcular multa de cada
+        $pendentes = Pagamento::whereIn("id", $request->ids)->where("status", "pendente")->get();
+        $this->aplicarMultas($pendentes);
+
+        // Gera lote_id único para agrupar todos os pagamentos deste batch
+        $loteId = "LT-" . strtoupper(Str::random(10));
+        $valorEntregueLote = $request->filled("valor_entregue") ? (float)$request->valor_entregue : null;
+        $primeiro = true;
+        foreach ($pendentes as $p) {
+            $p->update([
+                "status"                 => "pago",
+                "metodo"                 => $request->metodo,
+                "data_pagamento"         => $request->data_pagamento,
+                "num_referencia_externa" => $request->num_referencia_externa,
+                "multa_valor"            => (float)($p->multa_valor ?? 0),
+                "multa_id"               => $p->multa_id ?? null,
+                "valor_entregue"         => $primeiro ? $valorEntregueLote : null,
+                "lote_id"                => $loteId,
+            ]);
+            $primeiro = false;
+        }
+
+        // Assina cada pagamento (cadeia de hash mantida pela ordem dos IDs) com a chave global
+        try {
+            $signer = new FacturaSigner();
+            foreach ($pendentes->fresh() as $p) $signer->signPagamento($p);
+        } catch (\Throwable $e) {
+            Log::warning("Falha ao assinar facturas do lote: " . $e->getMessage());
+        }
+
         $pagamentos = Pagamento::whereIn("id", $request->ids)
             ->with("aluno.user", "aluno.matriculas.turma")
             ->get();
 
-        // Troco → regista como crédito na carteira do aluno
+        // Troco → regista como crédito na carteira do aluno (considera multas)
         if ($request->filled('valor_entregue')) {
-            $totalPago = $pagamentos->sum('valor');
+            $totalPago = $pagamentos->sum(fn($p) => (float)$p->valor + (float)($p->multa_valor ?? 0));
             $troco     = (float) $request->valor_entregue - $totalPago;
             if ($troco > 0.009) {
                 $alunoId = $pagamentos->first()->aluno_id;
@@ -153,21 +298,25 @@ class PagamentoController extends Controller {
     // ── Calendário: 12 meses com estado de pagamento ──
     public function calendario(Request $request) {
         $request->validate(["aluno_id" => "required", "ano_letivo" => "required"]);
-        $pagsMes = Pagamento::where("aluno_id", $request->aluno_id)
+        $pagsMes = Pagamento::with("propina")
+            ->where("aluno_id", $request->aluno_id)
             ->where("tipo", "mensalidade")
             ->where("mes_referencia", "like", $request->ano_letivo."-%")
-            ->get()
-            ->keyBy("mes_referencia");
+            ->get();
+
+        // Fallback dinâmico para pagamentos sem propina_id + cálculo de multa
+        $this->inferirPropinasEmFalta($pagsMes);
+        $this->aplicarMultas($pagsMes);
+        $pagsMes = $pagsMes->keyBy("mes_referencia");
 
         $calendario = [];
         for ($m = 1; $m <= 12; $m++) {
             $ref = $request->ano_letivo."-".str_pad($m, 2, "0", STR_PAD_LEFT);
-            $pag = $pagsMes->get($ref);
             $calendario[] = [
                 "mes"        => $m,
                 "mes_nome"   => self::$MESES[$m - 1],
                 "referencia" => $ref,
-                "pagamento"  => $pag,
+                "pagamento"  => $pagsMes->get($ref),
             ];
         }
         return response()->json($calendario);
@@ -440,6 +589,54 @@ class PagamentoController extends Controller {
             ],
             'por_tipo'       => $porTipo,
             'pagamentos'     => $pagamentos,
+        ]);
+    }
+
+    public function relatorioFinanceiro(Request $request) {
+        $query = Pagamento::query();
+
+        if ($request->ano_letivo) $query->where('mes_referencia', 'like', "%{$request->ano_letivo}%");
+        if ($request->tipo)       $query->where('tipo', $request->tipo);
+        if ($request->turma_id) {
+            $alunoIds = Matricula::where('turma_id', $request->turma_id)->pluck('aluno_id');
+            $query->whereIn('aluno_id', $alunoIds);
+        }
+
+        $pagamentos = $query->get();
+
+        $pago     = $pagamentos->where('status', 'pago');
+        $pendente = $pagamentos->where('status', 'pendente');
+        $vencido  = $pagamentos->where('status', 'vencido');
+
+        $porTipo = $pagamentos->groupBy('tipo')->map(fn($g) => [
+            'pago'     => $g->where('status', 'pago')->sum('valor'),
+            'pendente' => $g->whereIn('status', ['pendente', 'vencido'])->sum('valor'),
+            'count'    => $g->count(),
+        ]);
+
+        $porMetodo = $pago->groupBy('metodo')->map(fn($g) => [
+            'total' => round($g->sum('valor'), 2),
+            'count' => $g->count(),
+        ])->sortByDesc('total');
+
+        $evolucaoMensal = $pago
+            ->filter(fn($p) => $p->data_pagamento)
+            ->groupBy(fn($p) => substr($p->data_pagamento, 0, 7))
+            ->map(fn($g) => ['total' => round($g->sum('valor'), 2), 'count' => $g->count()])
+            ->sortKeys();
+
+        return response()->json([
+            'resumo' => [
+                'total_pago'        => round($pago->sum('valor'), 2),
+                'total_pendente'    => round($pendente->sum('valor'), 2),
+                'total_vencido'     => round($vencido->sum('valor'), 2),
+                'inadimplentes'     => $pagamentos->whereIn('status', ['pendente', 'vencido'])->pluck('aluno_id')->unique()->count(),
+                'count_recebidos'   => $pago->count(),
+                'count_pendentes'   => $pendente->count() + $vencido->count(),
+            ],
+            'por_tipo'        => $porTipo,
+            'por_metodo'      => $porMetodo,
+            'evolucao_mensal' => $evolucaoMensal,
         ]);
     }
 

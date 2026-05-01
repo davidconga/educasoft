@@ -312,6 +312,7 @@ function SenhaCard({ alunoId }) {
 const TABS = [
   { key:"perfil",      label:"Perfil",      icon:"👤" },
   { key:"academico",   label:"Académico",   icon:"🎓" },
+  { key:"documentos",  label:"Documentos",  icon:"📎" },
   { key:"financeiro",  label:"Financeiro",  icon:"💳" },
   { key:"acesso",      label:"Acesso",      icon:"🔑" },
 ];
@@ -568,6 +569,10 @@ export default function AlunoDetalhe() {
           )}
 
           {/* ── ABA ACESSO ── */}
+          {tab === "documentos" && (
+            <DocumentosCard alunoId={aluno.id} />
+          )}
+
           {tab === "acesso" && (
             <div className="max-w-sm">
               <SenhaCard alunoId={aluno.id} />
@@ -575,6 +580,164 @@ export default function AlunoDetalhe() {
           )}
 
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Documentos ────────────────────────────────────────────── */
+function DocumentosCard({ alunoId }) {
+  const [docs, setDocs]       = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState(null);
+  const [toast, setToast]     = useState(null);
+
+  const showToast = (msg, type="success") => { setToast({msg,type}); setTimeout(() => setToast(null), 3500); };
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await api.get(`/alunos/${alunoId}/documentos`);
+      setDocs(r.data.documentos || []);
+    } finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, [alunoId]);
+
+  const toggleEntregue = async (doc) => {
+    setSavingId(doc.tipo_documento_id);
+    try {
+      const fd = new FormData();
+      fd.append("tipo_documento_id", doc.tipo_documento_id);
+      fd.append("entregue", doc.entregue ? "0" : "1");
+      await api.post(`/alunos/${alunoId}/documentos`, fd);
+      await load();
+    } catch (err) {
+      showToast(err.response?.data?.message || "Erro.", "error");
+    } finally { setSavingId(null); }
+  };
+
+  const updateField = async (doc, patch) => {
+    setSavingId(doc.tipo_documento_id);
+    try {
+      const fd = new FormData();
+      fd.append("tipo_documento_id", doc.tipo_documento_id);
+      fd.append("entregue", "1");
+      Object.entries(patch).forEach(([k, v]) => {
+        if (v instanceof File) fd.append(k, v);
+        else if (v !== null && v !== undefined) fd.append(k, v);
+      });
+      await api.post(`/alunos/${alunoId}/documentos`, fd);
+      await load();
+      showToast("Guardado.");
+    } catch (err) {
+      showToast(err.response?.data?.errors ? Object.values(err.response.data.errors)[0]?.[0] : (err.response?.data?.message || "Erro."), "error");
+    } finally { setSavingId(null); }
+  };
+
+  const removerFicheiro = async (doc) => {
+    if (!doc.entrega_id) return;
+    if (!confirm(`Remover ficheiro de "${doc.nome}"?`)) return;
+    setSavingId(doc.tipo_documento_id);
+    try {
+      await api.delete(`/alunos/${alunoId}/documentos/${doc.entrega_id}/ficheiro`);
+      await load();
+    } catch (err) {
+      showToast("Erro ao remover.", "error");
+    } finally { setSavingId(null); }
+  };
+
+  if (loading) return <p className="text-center text-slate-400 py-8 text-sm">A carregar...</p>;
+
+  if (docs.length === 0) {
+    return (
+      <div className="text-center py-12 text-slate-400 text-sm">
+        Nenhum tipo de documento configurado para este aluno.
+        <br/>
+        <span className="text-xs">Configure em <strong>Tipos de Documento</strong> no menu Configurações.</span>
+      </div>
+    );
+  }
+
+  const obrigatorios = docs.filter(d => d.obrigatorio);
+  const entreguesObrig = obrigatorios.filter(d => d.entregue).length;
+
+  return (
+    <div className="space-y-4">
+      {toast && (
+        <div className={`fixed top-6 right-6 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-medium text-white
+          ${toast.type === "error" ? "bg-red-500" : "bg-emerald-500"}`}>{toast.msg}</div>
+      )}
+
+      {obrigatorios.length > 0 && (
+        <div className={`rounded-xl px-4 py-3 text-sm flex items-center justify-between
+          ${entreguesObrig === obrigatorios.length ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-amber-50 text-amber-700 border border-amber-200"}`}>
+          <span>
+            <strong>{entreguesObrig}/{obrigatorios.length}</strong> documentos obrigatórios entregues
+          </span>
+          {entreguesObrig === obrigatorios.length ? <span>✓ Tudo OK</span> : <span>Faltam {obrigatorios.length - entreguesObrig}</span>}
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {docs.map(doc => (
+          <div key={doc.tipo_documento_id}
+            className={`rounded-xl border p-4 ${doc.entregue ? "border-emerald-200 bg-emerald-50/30" : doc.bloqueia_matricula ? "border-red-200 bg-red-50/30" : "border-slate-200 bg-white"}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3 flex-1">
+                <button onClick={() => toggleEntregue(doc)} disabled={savingId === doc.tipo_documento_id}
+                  className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition
+                    ${doc.entregue ? "bg-emerald-600 border-emerald-600 text-white" : "border-slate-300 hover:border-emerald-500"}`}>
+                  {doc.entregue && <span className="text-xs">✓</span>}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="font-medium text-slate-800">{doc.nome}</h4>
+                    {doc.obrigatorio && <span className="text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Obrigatório</span>}
+                    {doc.bloqueia_matricula && <span className="text-[10px] font-bold uppercase tracking-wide text-red-700 bg-red-100 px-1.5 py-0.5 rounded">Bloqueia matrícula</span>}
+                  </div>
+                  {doc.descricao && <p className="text-xs text-slate-500 mt-1">{doc.descricao}</p>}
+                  {doc.entregue && doc.data_entrega && (
+                    <p className="text-xs text-slate-400 mt-1">Entregue em {new Date(doc.data_entrega).toLocaleDateString("pt-AO")}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {doc.entregue && (
+              <div className="mt-3 pl-8 space-y-2">
+                {doc.aceita_upload && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {doc.ficheiro ? (
+                      <>
+                        <a href={`/storage/${doc.ficheiro}`} target="_blank" rel="noreferrer"
+                          className="text-xs px-2 py-1 rounded bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100">
+                          📎 {doc.ficheiro_original_nome || "Ver ficheiro"}
+                        </a>
+                        <button onClick={() => removerFicheiro(doc)} disabled={savingId === doc.tipo_documento_id}
+                          className="text-xs text-red-500 hover:underline">Remover</button>
+                      </>
+                    ) : (
+                      <label className="text-xs px-2 py-1 rounded bg-white border border-dashed border-slate-300 text-slate-500 hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1">
+                        ⬆ Anexar PDF/imagem
+                        <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.webp"
+                          onChange={e => e.target.files[0] && updateField(doc, { ficheiro: e.target.files[0] })}/>
+                      </label>
+                    )}
+                  </div>
+                )}
+                <textarea
+                  defaultValue={doc.observacoes || ""}
+                  placeholder="Observações..."
+                  rows={1}
+                  onBlur={e => {
+                    if (e.target.value !== (doc.observacoes || "")) updateField(doc, { observacoes: e.target.value });
+                  }}
+                  className="w-full text-xs px-2 py-1 border border-slate-200 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

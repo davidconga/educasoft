@@ -24,7 +24,7 @@ function imprimirRelatorio(relatorio, escola) {
   const hoje = new Date(relatorio.data).toLocaleDateString("pt-AO", { weekday:"long", year:"numeric", month:"long", day:"numeric" });
   const baseUrl = window.location.origin;
   const logoUrl = escola?.logo ? `${baseUrl}/storage/${escola.logo}` : null;
-  const escolaNome = escola?.nome || "EduSoft";
+  const escolaNome = escola?.nome || "Educajá";
 
   const linhas = relatorio.pagamentos.map(p => `
     <tr>
