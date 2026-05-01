@@ -99,7 +99,7 @@ export default function Alunos() {
 
   const [form, setForm] = useState({
     nome:"", email:"", telefone:"", data_nascimento:"", genero:"",
-    nome_pai:"", nome_mae:"", telefone_responsavel:"", endereco:""
+    nome_pai:"", nome_mae:"", telefone_responsavel:"", email_responsavel:"", endereco:""
   });
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState("");
@@ -184,7 +184,7 @@ export default function Alunos() {
     try {
       await api.post("/alunos", form);
       setShowForm(false);
-      setForm({ nome:"", email:"", telefone:"", data_nascimento:"", genero:"", nome_pai:"", nome_mae:"", telefone_responsavel:"", endereco:"" });
+      setForm({ nome:"", email:"", telefone:"", data_nascimento:"", genero:"", nome_pai:"", nome_mae:"", telefone_responsavel:"", email_responsavel:"", endereco:"" });
       load();
     } catch (err) { setError(err.response?.data?.message || "Erro ao guardar."); }
     finally { setSaving(false); }
@@ -441,6 +441,7 @@ export default function Alunos() {
                 <div><label className="block text-xs font-medium text-slate-600 mb-1">Data Nasc.</label><input type="date" value={form.data_nascimento} onChange={e=>setForm({...form,data_nascimento:e.target.value})} className={inp}/></div>
                 <div><label className="block text-xs font-medium text-slate-600 mb-1">Género</label><select value={form.genero} onChange={e=>setForm({...form,genero:e.target.value})} className={inp}><option value="">Seleccionar</option><option value="masculino">Masculino</option><option value="feminino">Feminino</option></select></div>
                 <div><label className="block text-xs font-medium text-slate-600 mb-1">Tel. Responsável</label><input value={form.telefone_responsavel} onChange={e=>setForm({...form,telefone_responsavel:e.target.value})} className={inp}/></div>
+                <div><label className="block text-xs font-medium text-slate-600 mb-1">Email do Responsável</label><input type="email" value={form.email_responsavel} onChange={e=>setForm({...form,email_responsavel:e.target.value})} className={inp}/></div>
                 <div><label className="block text-xs font-medium text-slate-600 mb-1">Nome do Pai</label><input value={form.nome_pai} onChange={e=>setForm({...form,nome_pai:e.target.value})} className={inp}/></div>
                 <div><label className="block text-xs font-medium text-slate-600 mb-1">Nome da Mãe</label><input value={form.nome_mae} onChange={e=>setForm({...form,nome_mae:e.target.value})} className={inp}/></div>
                 <div className="col-span-2"><label className="block text-xs font-medium text-slate-600 mb-1">Endereço</label><input value={form.endereco} onChange={e=>setForm({...form,endereco:e.target.value})} className={inp}/></div>

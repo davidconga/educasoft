@@ -1,9 +1,19 @@
 import { useState, useEffect } from "react";
+import { Mail, MessageCircle } from "lucide-react";
 import api from "../../services/api";
 import { useAuthStore } from "../../store/auth";
 import { imprimirRecibo, buildReciboHtml } from "../../components/Recibo";
 import { useMeses } from "../../hooks/useMeses";
 import SaftButton from "../../components/SaftButton";
+
+const enviarLembrete = async (id, canal) => {
+  try {
+    const r = await api.post(`/pagamentos/${id}/lembrete`, { canal });
+    alert(r.data.message);
+  } catch (e) {
+    alert(e.response?.data?.message || "Erro ao enviar lembrete.");
+  }
+};
 
 const fmt = (v) => Number(v || 0).toLocaleString("pt-AO");
 const ANO_ATUAL = String(new Date().getFullYear());
@@ -238,10 +248,20 @@ function CalendarioPropinas({ alunoSel, onConfirmar }) {
                     </td>
                     <td className="px-5 py-3.5 text-right">
                       {p?.status === "pendente" && (
-                        <button onClick={() => onConfirmar(p.id)}
-                          className="text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors">
-                          Confirmar
-                        </button>
+                        <div className="inline-flex items-center gap-2">
+                          <button onClick={() => onConfirmar(p.id)}
+                            className="text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors">
+                            Confirmar
+                          </button>
+                          <button onClick={() => enviarLembrete(p.id, "email")} title="Enviar lembrete por email"
+                            className="text-slate-400 hover:text-blue-600 transition-colors">
+                            <Mail size={14} />
+                          </button>
+                          <button onClick={() => enviarLembrete(p.id, "sms")} title="Enviar lembrete por SMS"
+                            className="text-slate-400 hover:text-emerald-600 transition-colors">
+                            <MessageCircle size={14} />
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -1043,18 +1063,28 @@ export default function Tesouraria() {
                                     </td>
                                     <td className="px-5 py-3.5 text-right">
                                       {(p.status === "pendente" || p.status === "vencido") && (
-                                        <button
-                                          onClick={() => {
-                                            setConfirmId(p.id);
-                                            setConfirmPag(p);
-                                            setConfirmMetodo("dinheiro");
-                                            setConfirmData(new Date().toISOString().split("T")[0]);
-                                            setConfirmEntregue("");
-                                          }}
-                                          className="text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
-                                        >
-                                          Confirmar
-                                        </button>
+                                        <div className="inline-flex items-center gap-2">
+                                          <button
+                                            onClick={() => {
+                                              setConfirmId(p.id);
+                                              setConfirmPag(p);
+                                              setConfirmMetodo("dinheiro");
+                                              setConfirmData(new Date().toISOString().split("T")[0]);
+                                              setConfirmEntregue("");
+                                            }}
+                                            className="text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
+                                          >
+                                            Confirmar
+                                          </button>
+                                          <button onClick={() => enviarLembrete(p.id, "email")} title="Enviar lembrete por email"
+                                            className="text-slate-400 hover:text-blue-600 transition-colors">
+                                            <Mail size={14} />
+                                          </button>
+                                          <button onClick={() => enviarLembrete(p.id, "sms")} title="Enviar lembrete por SMS"
+                                            className="text-slate-400 hover:text-emerald-600 transition-colors">
+                                            <MessageCircle size={14} />
+                                          </button>
+                                        </div>
                                       )}
                                       {p.status === "pago" && loteLeaders.has(p.id) && (
                                         <button

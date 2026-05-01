@@ -20,20 +20,37 @@ class SaftAoExporter {
     private Escola $escola;
     private int $ano;
     private ?int $mes;
+    private ?string $softwareValidationOverride;
 
-    public function __construct(Escola $escola, int $ano, ?int $mes = null) {
-        $this->escola = $escola;
-        $this->ano    = $ano;
-        $this->mes    = $mes;
+    /** Número de validação AGT do software. Placeholder "0/AGT/YYYY" → não certificado. */
+    private const SOFTWARE_VALIDATION_NUMBER = "0/AGT/2026";
+
+    public function __construct(Escola $escola, int $ano, ?int $mes = null, ?string $softwareValidationOverride = null) {
+        $this->escola                     = $escola;
+        $this->ano                        = $ano;
+        $this->mes                        = $mes;
+        $this->softwareValidationOverride = $softwareValidationOverride;
+    }
+
+    private function softwareValidationNumber(): string {
+        return $this->softwareValidationOverride ?? self::SOFTWARE_VALIDATION_NUMBER;
+    }
+
+    /** True se o software ainda não está certificado pela AGT (placeholder "0/AGT/..."). */
+    private function isUncertified(): bool {
+        return str_starts_with($this->softwareValidationNumber(), "0/");
     }
 
     public function gerarXml(): string {
+        $hoje   = Carbon::today()->endOfDay();
         $inicio = $this->mes
             ? Carbon::create($this->ano, $this->mes, 1)->startOfDay()
             : Carbon::create($this->ano, 1, 1)->startOfDay();
-        $fim = $this->mes
+        $fimRaw = $this->mes
             ? Carbon::create($this->ano, $this->mes, 1)->endOfMonth()->endOfDay()
             : Carbon::create($this->ano, 12, 31)->endOfDay();
+        // EndDate não pode ser maior que DateCreated (=hoje) — AGT rejeita
+        $fim = $fimRaw->greaterThan($hoje) ? $hoje : $fimRaw;
 
         $pagamentos = Pagamento::with("aluno.user")
             ->whereNotNull("data_pagamento")
@@ -54,6 +71,7 @@ class SaftAoExporter {
 
         $xml->startElement("AuditFile");
         $xml->writeAttribute("xmlns", "urn:OECD:StandardAuditFile-Tax:AO_1.01_01");
+        $xml->writeAttribute("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
 
         $this->writeHeader($xml, $inicio, $fim);
         $this->writeMasterFiles($xml, $clientes, $propinas, $emolumentos);
@@ -65,28 +83,35 @@ class SaftAoExporter {
     }
 
     private function writeHeader(\XMLWriter $x, Carbon $ini, Carbon $fim): void {
+        $nif         = (string) ($this->escola->nif ?? $this->escola->getInternal("nif") ?? "999999999");
+        $nomeEscola  = (string) ($this->escola->nome ?? "Escola");
+
         $x->startElement("Header");
         $x->writeElement("AuditFileVersion",       "1.01_01");
-        $x->writeElement("CompanyID",              (string) ($this->escola->codigo ?? $this->escola->id));
-        $x->writeElement("TaxRegistrationNumber",  (string) ($this->escola->nif ?? "999999999"));
-        $x->writeElement("TaxAccountingBasis",     "F"); // F = Facturação
-        $x->writeElement("CompanyName",            (string) ($this->escola->nome ?? "—"));
+        $x->writeElement("CompanyID",              $nif);
+        $x->writeElement("TaxRegistrationNumber",  $nif);
+        $x->writeElement("TaxAccountingBasis",     "F");
+        $x->writeElement("CompanyName",            $nomeEscola);
         $x->startElement("CompanyAddress");
-            $x->writeElement("AddressDetail", (string) ($this->escola->endereco ?? "—"));
+            $x->writeElement("AddressDetail", (string) ($this->escola->endereco ?: "Desconhecido"));
             $x->writeElement("City",          (string) ($this->escola->getInternal("cidade") ?? "Luanda"));
-            $x->writeElement("PostalCode",    "0000");
             $x->writeElement("Country",       "AO");
         $x->endElement();
-        $x->writeElement("FiscalYear",           (string) $this->ano);
-        $x->writeElement("StartDate",            $ini->format("Y-m-d"));
-        $x->writeElement("EndDate",              $fim->format("Y-m-d"));
-        $x->writeElement("CurrencyCode",         "AOA");
-        $x->writeElement("DateCreated",          now()->format("Y-m-d"));
-        $x->writeElement("TaxEntity",            "Global");
-        $x->writeElement("ProductCompanyTaxID",  "Educajá-AO");
-        $x->writeElement("SoftwareCertificateNumber", "0/AGT/2026"); // placeholder até obter certificação
-        $x->writeElement("ProductID",            "Educajá/Educajá");
-        $x->writeElement("ProductVersion",       "1.0");
+        $x->writeElement("FiscalYear",                  (string) $this->ano);
+        $x->writeElement("StartDate",                   $ini->format("Y-m-d"));
+        $x->writeElement("EndDate",                     $fim->format("Y-m-d"));
+        $x->writeElement("CurrencyCode",                "AOA");
+        $x->writeElement("DateCreated",                 now()->format("Y-m-d"));
+        $x->writeElement("TaxEntity",                   "Global");
+        // Fallback: até obter certificação AGT, usamos o próprio NIF da escola como produtor
+        // e ProductID = "EducajaAO/<NomeEscolaSemAcentos>". Ao certificar substituir por NIF
+        // real do produtor de software e SoftwareValidationNumber emitido pela AGT.
+        $x->writeElement("ProductCompanyTaxID",         $nif);
+        $x->writeElement("SoftwareValidationNumber",    $this->softwareValidationNumber());
+        // ProductID: "<NomeProduto>/<NomeEmpresaProdutora>". AGT exige formato simples,
+        // sem espaços nem caracteres especiais (saft.co.ao aceita espaços, AGT não).
+        $x->writeElement("ProductID",                   "EducajaAO/Educaja");
+        $x->writeElement("ProductVersion",              "1.0");
         $x->endElement();
     }
 
@@ -96,26 +121,28 @@ class SaftAoExporter {
         // Customers
         foreach ($clientes as $c) {
             $x->startElement("Customer");
-            $x->writeElement("CustomerID",            (string) $c->id);
-            $x->writeElement("AccountID",             "Desconhecido");
-            $x->writeElement("CustomerTaxID",         (string) ($c->bi ?? "999999999"));
-            $x->writeElement("CompanyName",           (string) ($c->user?->nome ?? "Aluno {$c->id}"));
+            $x->writeElement("CustomerID",      (string) $c->id);
+            $x->writeElement("AccountID",       "Desconhecido");
+            $x->writeElement("CustomerTaxID",   (string) ($c->bi ?: "999999999"));
+            $x->writeElement("CompanyName",     (string) ($c->user?->nome ?? "Aluno {$c->id}"));
             $x->startElement("BillingAddress");
-                $x->writeElement("AddressDetail", (string) ($c->endereco ?? "Desconhecido"));
+                $x->writeElement("AddressDetail", (string) ($c->endereco ?: "Desconhecido"));
                 $x->writeElement("City",          "Desconhecido");
-                $x->writeElement("PostalCode",    "0000");
+                $x->writeElement("PostalCode",    "Desconhecido");
                 $x->writeElement("Country",       "AO");
             $x->endElement();
+            if ($c->telefone_responsavel) $x->writeElement("Telephone", (string)$c->telefone_responsavel);
+            if ($c->user?->email)         $x->writeElement("Email",     (string)$c->user->email);
             $x->writeElement("SelfBillingIndicator", "0");
             $x->endElement();
         }
 
-        // Products (propinas + emolumentos)
+        // Products (propinas + emolumentos) — type S (Service)
         foreach ($propinas as $p) {
             $x->startElement("Product");
-            $x->writeElement("ProductType",        "S"); // Service
+            $x->writeElement("ProductType",        "S");
             $x->writeElement("ProductCode",        "PROP-" . $p->id);
-            $x->writeElement("ProductDescription", (string) ($p->nome ?? "Propina"));
+            $x->writeElement("ProductDescription", (string) ($p->nome ?: "Propina"));
             $x->writeElement("ProductNumberCode",  "PROP-" . $p->id);
             $x->endElement();
         }
@@ -123,19 +150,27 @@ class SaftAoExporter {
             $x->startElement("Product");
             $x->writeElement("ProductType",        "S");
             $x->writeElement("ProductCode",        "EMO-" . $e->id);
-            $x->writeElement("ProductDescription", (string) ($e->nome ?? "Emolumento"));
+            $x->writeElement("ProductDescription", (string) ($e->nome ?: "Emolumento"));
             $x->writeElement("ProductNumberCode",  "EMO-" . $e->id);
             $x->endElement();
         }
 
-        // TaxTable — educação isenta
+        // Produto especial para multas (referenciado nas Lines de multa)
+        $x->startElement("Product");
+        $x->writeElement("ProductType",        "S");
+        $x->writeElement("ProductCode",        "MULTA");
+        $x->writeElement("ProductDescription", "Multa por atraso");
+        $x->writeElement("ProductNumberCode",  "MULTA");
+        $x->endElement();
+
+        // TaxTable — educação isenta de IVA (alínea f) art.12 CIVA, código M15)
         $x->startElement("TaxTable");
             $x->startElement("TaxTableEntry");
                 $x->writeElement("TaxType",          "IVA");
                 $x->writeElement("TaxCountryRegion", "AO");
                 $x->writeElement("TaxCode",          "ISE");
-                $x->writeElement("Description",      "Isento — serviços de educação");
-                $x->writeElement("TaxPercentage",    "0.00");
+                $x->writeElement("Description",      "IVA ISE 0%");
+                $x->writeElement("TaxPercentage",    "0");
             $x->endElement();
         $x->endElement();
 
@@ -151,55 +186,100 @@ class SaftAoExporter {
         $x->writeElement("TotalDebit",      number_format($totalDebit, 2, ".", ""));
         $x->writeElement("TotalCredit",     number_format($totalCredit, 2, ".", ""));
 
+        $sourceId = (string) ($this->escola->nif ?? $this->escola->getInternal("nif") ?? "0");
+
         foreach ($pagamentos as $p) {
-            $totalLinha = (float)$p->valor + (float)($p->multa_valor ?? 0);
+            $totalLinha    = (float)$p->valor + (float)($p->multa_valor ?? 0);
+            $dataPag       = optional($p->data_pagamento)->format("Y-m-d") ?? now()->format("Y-m-d");
+            $dataPagFull   = optional($p->data_pagamento)->format("Y-m-d\TH:i:s") ?? ($p->updated_at ?? now())->format("Y-m-d\TH:i:s");
+            // Formato AGT: "FR YYYY/N" — usa o mesmo helper que o signer (garante consistência)
+            $invoiceNo = \App\Services\Tenant\FacturaSigner::invoiceNoFor($p);
+
             $x->startElement("Invoice");
-            $x->writeElement("InvoiceNo",       (string) ($p->referencia ?? "PAG-" . $p->id));
-            $x->writeElement("DocumentStatus");  // sub-element opcional
+            $x->writeElement("InvoiceNo",  $invoiceNo);
             $x->startElement("DocumentStatus");
                 $x->writeElement("InvoiceStatus",     "N");
-                $x->writeElement("InvoiceStatusDate", optional($p->data_pagamento)->format("Y-m-d\TH:i:s") ?? now()->format("Y-m-d\TH:i:s"));
-                $x->writeElement("SourceID",          "system");
+                $x->writeElement("InvoiceStatusDate", $dataPagFull);
+                $x->writeElement("SourceID",          $sourceId);
                 $x->writeElement("SourceBilling",     "P");
             $x->endElement();
-            $x->writeElement("Hash",            (string) ($p->assinatura ?? ""));
-            $x->writeElement("HashControl",     "1");
-            $x->writeElement("Period",          (string) optional($p->data_pagamento)->month);
-            $x->writeElement("InvoiceDate",     optional($p->data_pagamento)->format("Y-m-d") ?? now()->format("Y-m-d"));
-            $x->writeElement("InvoiceType",     "FT");
+            // Software não certificado pela AGT (spec 7.d): Hash="0" e HashControl="Não Validado pela AGT".
+            // Quando o software for certificado, comutar SOFTWARE_VALIDATION_NUMBER para o número real
+            // emitido pela AGT — passa automaticamente a emitir Hash + HashControl reais.
+            if ($this->isUncertified()) {
+                $x->writeElement("Hash",        "0");
+                $x->writeElement("HashControl", "Não Validado pela AGT");
+            } else {
+                $hashFactura = !empty($p->assinatura) ? (string) $p->assinatura : "0";
+                $x->writeElement("Hash",        $hashFactura);
+                $x->writeElement("HashControl", $hashFactura === "0" ? "0" : "1");
+            }
+            $x->writeElement("Period",      (string) ((int) optional($p->data_pagamento)->month ?: 1));
+            $x->writeElement("InvoiceDate", $dataPag);
+            $x->writeElement("InvoiceType", "FR"); // FR = Factura-Recibo
             $x->startElement("SpecialRegimes");
-                $x->writeElement("SelfBillingIndicator",      "0");
-                $x->writeElement("CashVATSchemeIndicator",    "0");
+                $x->writeElement("SelfBillingIndicator",        "0");
+                $x->writeElement("CashVATSchemeIndicator",      "0");
                 $x->writeElement("ThirdPartiesBillingIndicator","0");
             $x->endElement();
-            $x->writeElement("SourceID",        "system");
-            $x->writeElement("SystemEntryDate", ($p->updated_at ?? now())->format("Y-m-d\TH:i:s"));
+            $x->writeElement("SourceID",        $sourceId);
+            $x->writeElement("SystemEntryDate", $dataPagFull);
             $x->writeElement("CustomerID",      (string) $p->aluno_id);
 
-            // Line item
+            // Line
             $x->startElement("Line");
-                $x->writeElement("LineNumber",   "1");
-                $x->writeElement("ProductCode",  $p->propina_id ? "PROP-".$p->propina_id : ($p->emolumento_id ? "EMO-".$p->emolumento_id : "OUT"));
-                $x->writeElement("ProductDescription", (string) ($p->propina?->nome ?? $p->emolumento?->nome ?? $p->tipo));
-                $x->writeElement("Quantity",     "1");
-                $x->writeElement("UnitOfMeasure","UN");
-                $x->writeElement("UnitPrice",    number_format($p->valor, 2, ".", ""));
-                $x->writeElement("TaxPointDate", optional($p->data_pagamento)->format("Y-m-d") ?? now()->format("Y-m-d"));
-                $x->writeElement("Description",  (string) ($p->mes_referencia ?? $p->tipo));
-                $x->writeElement("CreditAmount", number_format($p->valor, 2, ".", ""));
+                $x->writeElement("LineNumber",         "1");
+                $x->writeElement("ProductCode",        $p->propina_id ? "PROP-".$p->propina_id : ($p->emolumento_id ? "EMO-".$p->emolumento_id : "OUT"));
+                $x->writeElement("ProductDescription", (string) ($p->propina?->nome ?: $p->emolumento?->nome ?: ucfirst($p->tipo)));
+                $x->writeElement("Quantity",           "1");
+                $x->writeElement("UnitOfMeasure",      "Uni");
+                $x->writeElement("UnitPrice",          number_format($p->valor, 6, ".", ""));
+                $x->writeElement("TaxPointDate",       $dataPag);
+                $x->writeElement("Description",        (string) ($p->propina?->nome ?: $p->emolumento?->nome ?: ucfirst($p->tipo)));
+                $x->writeElement("CreditAmount",       number_format($p->valor, 6, ".", ""));
                 $x->startElement("Tax");
                     $x->writeElement("TaxType",          "IVA");
                     $x->writeElement("TaxCountryRegion", "AO");
                     $x->writeElement("TaxCode",          "ISE");
-                    $x->writeElement("TaxPercentage",    "0.00");
+                    $x->writeElement("TaxPercentage",    "0");
                 $x->endElement();
+                $x->writeElement("TaxExemptionReason", "Isento nos termos da alínea f) do nº1 do artigo 12.º do CIVA");
+                $x->writeElement("TaxExemptionCode",   "M15");
             $x->endElement(); // Line
 
-            // Totals
+            // Multa: linha adicional se houver
+            if (((float)($p->multa_valor ?? 0)) > 0.009) {
+                $x->startElement("Line");
+                    $x->writeElement("LineNumber",         "2");
+                    $x->writeElement("ProductCode",        "MULTA");
+                    $x->writeElement("ProductDescription", "Multa por atraso");
+                    $x->writeElement("Quantity",           "1");
+                    $x->writeElement("UnitOfMeasure",      "Uni");
+                    $x->writeElement("UnitPrice",          number_format($p->multa_valor, 6, ".", ""));
+                    $x->writeElement("TaxPointDate",       $dataPag);
+                    $x->writeElement("Description",        "Multa por atraso");
+                    $x->writeElement("CreditAmount",       number_format($p->multa_valor, 6, ".", ""));
+                    $x->startElement("Tax");
+                        $x->writeElement("TaxType",          "IVA");
+                        $x->writeElement("TaxCountryRegion", "AO");
+                        $x->writeElement("TaxCode",          "ISE");
+                        $x->writeElement("TaxPercentage",    "0");
+                    $x->endElement();
+                    $x->writeElement("TaxExemptionReason", "Isento nos termos da alínea f) do nº1 do artigo 12.º do CIVA");
+                    $x->writeElement("TaxExemptionCode",   "M15");
+                $x->endElement();
+            }
+
+            // Totals + Payment
             $x->startElement("DocumentTotals");
-                $x->writeElement("TaxPayable",      "0.00");
-                $x->writeElement("NetTotal",        number_format($totalLinha, 2, ".", ""));
-                $x->writeElement("GrossTotal",      number_format($totalLinha, 2, ".", ""));
+                $x->writeElement("TaxPayable", "0.00");
+                $x->writeElement("NetTotal",   number_format($totalLinha, 2, ".", ""));
+                $x->writeElement("GrossTotal", number_format($totalLinha, 2, ".", ""));
+                $x->startElement("Payment");
+                    $x->writeElement("PaymentMechanism", $this->mapPaymentMechanism($p->metodo));
+                    $x->writeElement("PaymentAmount",    number_format($totalLinha, 2, ".", ""));
+                    $x->writeElement("PaymentDate",      $dataPag);
+                $x->endElement();
             $x->endElement();
 
             $x->endElement(); // Invoice
@@ -207,5 +287,16 @@ class SaftAoExporter {
 
         $x->endElement(); // SalesInvoices
         $x->endElement(); // SourceDocuments
+    }
+
+    /** Mapeia métodos internos → códigos AGT (PaymentMechanism). */
+    private function mapPaymentMechanism(?string $metodo): string {
+        return match($metodo) {
+            "dinheiro"      => "CD",  // Cash deposit
+            "transferencia" => "TB",  // Transfer
+            "multicaixa"    => "MB",  // Multibanco / Multicaixa
+            "referencia"    => "MB",
+            default         => "OU",  // Outro
+        };
     }
 }

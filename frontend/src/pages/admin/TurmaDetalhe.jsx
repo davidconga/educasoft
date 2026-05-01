@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, Users, BookOpen, Clock, User, MapPin, Calendar, UserPlus, Search, X, CheckCircle, AlertCircle } from "lucide-react";
+import { ArrowLeft, Users, BookOpen, Clock, User, MapPin, Calendar, UserPlus, Search, X, CheckCircle, AlertCircle, MessageSquare, Sparkles } from "lucide-react";
 import api from "../../services/api";
+import { chatService } from "../../services/chatService";
+import Comunidade from "../comunidade/Comunidade";
 
 const TURNOS = { manha: "Manhã", tarde: "Tarde", noite: "Noite" };
 const ANO_ATUAL = new Date().getFullYear().toString();
@@ -195,6 +197,15 @@ export default function TurmaDetalhe() {
     setTimeout(() => setToast(null), 3500);
   };
 
+  const abrirChatTurma = async () => {
+    try {
+      const r = await chatService.iniciarTurma(id);
+      navigate(`/chat?conversa=${r.id}`);
+    } catch (e) {
+      showToast(e?.response?.data?.message || "Não foi possível abrir o chat.", "error");
+    }
+  };
+
   if (loading) return <p className="text-center text-slate-400 py-16">A carregar...</p>;
   if (!turma)  return null;
 
@@ -205,6 +216,7 @@ export default function TurmaDetalhe() {
     { key: "alunos",      label: "Alunos",      icon: Users,    count: turma.alunos?.length },
     { key: "disciplinas", label: "Disciplinas",  icon: BookOpen, count: turma.disciplinas?.length },
     { key: "horarios",    label: "Horários",     icon: Clock,    count: turma.horarios?.length },
+    { key: "forum",       label: "Fórum",        icon: Sparkles },
   ];
 
   return (
@@ -236,9 +248,18 @@ export default function TurmaDetalhe() {
                 <Badge color="slate">{turma.ano_letivo}</Badge>
               </div>
             </div>
-            <div className="text-right flex-shrink-0">
-              <div className="text-3xl font-bold text-blue-600">{ocupacao}</div>
-              <div className="text-xs text-slate-400">de {turma.capacidade} alunos</div>
+            <div className="flex items-start gap-3 flex-shrink-0">
+              <button
+                onClick={abrirChatTurma}
+                title="Abrir chat da turma"
+                className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-3 py-2 rounded-xl text-sm font-medium transition-colors"
+              >
+                <MessageSquare size={15}/> Chat da turma
+              </button>
+              <div className="text-right">
+                <div className="text-3xl font-bold text-blue-600">{ocupacao}</div>
+                <div className="text-xs text-slate-400">de {turma.capacidade} alunos</div>
+              </div>
             </div>
           </div>
 
@@ -396,6 +417,11 @@ export default function TurmaDetalhe() {
             )
           }
         </div>
+      )}
+
+      {/* Tab: Fórum */}
+      {tab === "forum" && (
+        <Comunidade turmaId={Number(id)} modoForum />
       )}
 
       {/* Modal matricular */}

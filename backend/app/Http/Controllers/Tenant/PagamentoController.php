@@ -130,7 +130,8 @@ class PagamentoController extends Controller {
             ]
         );
         $pag = Pagamento::create($data);
-        return response()->json($pag->load("aluno.user","plano","propina","emolumento"), 201);
+        if (\App\Services\Tenant\BolsaApplier::aplicar($pag) > 0) $pag->save();
+        return response()->json($pag->load("aluno.user","plano","propina","emolumento","bolsa","financiador"), 201);
     }
 
     public function show(Pagamento $pagamento) {
@@ -349,7 +350,7 @@ class PagamentoController extends Controller {
                     ->exists();
                 if ($existe) { $pulados++; continue; }
                 $vencimento = date("Y-m-t", mktime(0, 0, 0, $mes, 1, (int)$request->ano_letivo));
-                Pagamento::create([
+                $pag = Pagamento::create([
                     "aluno_id"      => $alunoId,
                     "propina_id"    => $propina->id,
                     "plano_id"      => null,
@@ -361,6 +362,7 @@ class PagamentoController extends Controller {
                     "status"        => "pendente",
                     "data_vencimento"=> $vencimento,
                 ]);
+                if (\App\Services\Tenant\BolsaApplier::aplicar($pag) > 0) $pag->save();
                 $criados++;
             }
         }
@@ -392,7 +394,7 @@ class PagamentoController extends Controller {
                     ->where("emolumento_id", $emol->id)
                     ->exists();
                 if ($existe) { $pulados++; continue; }
-                Pagamento::create([
+                $pag = Pagamento::create([
                     "aluno_id"      => $alunoId,
                     "emolumento_id" => $emol->id,
                     "plano_id"      => null,
@@ -403,6 +405,7 @@ class PagamentoController extends Controller {
                     "metodo"        => "dinheiro",
                     "status"        => "pendente",
                 ]);
+                if (\App\Services\Tenant\BolsaApplier::aplicar($pag) > 0) $pag->save();
                 $criados++;
             }
         }

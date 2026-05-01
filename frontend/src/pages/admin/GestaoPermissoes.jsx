@@ -40,6 +40,8 @@ const MODULOS = [
       { key: "tesouraria",        label: "Tesouraria" },
       { key: "controlo_propinas", label: "Controlo Propinas" },
       { key: "precario",          label: "Preçário" },
+      { key: "bolsas",            label: "Bolsas & Financiadores" },
+      { key: "lembretes",         label: "Lembretes Propinas" },
     ],
   },
 ];

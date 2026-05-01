@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Printer } from "lucide-react";
+import { Printer, Mail, MessageCircle } from "lucide-react";
 import api from "../../services/api";
 import { useAuthStore } from "../../store/auth";
 import { imprimirRecibo } from "../../components/Recibo";
@@ -169,6 +169,15 @@ export default function Pagamentos() {
     e.preventDefault();
     await api.post("/pagamentos", form);
     setShowForm(false); load();
+  };
+
+  const enviarLembrete = async (p, canal) => {
+    try {
+      const r = await api.post(`/pagamentos/${p.id}/lembrete`, { canal });
+      alert(r.data.message);
+    } catch (e) {
+      alert(e.response?.data?.message || "Erro ao enviar lembrete.");
+    }
   };
 
   const statusColor = {
@@ -354,6 +363,16 @@ export default function Pagamentos() {
                           ✅ Confirmar
                         </button>
                       )}
+                      {(p.status === "pendente" || p.status === "vencido") && (<>
+                        <button onClick={() => enviarLembrete(p, "email")} title="Enviar lembrete por email"
+                          className="text-slate-400 hover:text-blue-600 transition-colors">
+                          <Mail size={16} />
+                        </button>
+                        <button onClick={() => enviarLembrete(p, "sms")} title="Enviar lembrete por SMS"
+                          className="text-slate-400 hover:text-emerald-600 transition-colors">
+                          <MessageCircle size={16} />
+                        </button>
+                      </>)}
                       {p.status === "pago" && (<>
                         <button onClick={() => imprimirRecibo(p, escola)} title="Imprimir recibo" className="text-slate-400 hover:text-blue-600 transition-colors">
                           <Printer size={16} />

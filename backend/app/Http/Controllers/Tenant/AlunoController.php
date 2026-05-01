@@ -46,7 +46,7 @@ class AlunoController extends Controller {
         $request->validate(["nome"=>"required","email"=>"required|email|unique:users","data_nascimento"=>"nullable|date"]);
         return DB::transaction(function() use ($request) {
             $user = User::create(["nome"=>$request->nome,"email"=>$request->email,"password"=>bcrypt($request->password ?? "educasoft123"),"tipo"=>"aluno","telefone"=>$request->telefone]);
-            $aluno = Aluno::create(array_merge($request->only(["data_nascimento","genero","naturalidade","nacionalidade","bi","nome_pai","nome_mae","telefone_responsavel","endereco"]),["user_id"=>$user->id,"numero_aluno"=>"A".str_pad(Aluno::count()+1, 5, "0", STR_PAD_LEFT)]));
+            $aluno = Aluno::create(array_merge($request->only(["data_nascimento","genero","naturalidade","nacionalidade","bi","nome_pai","nome_mae","telefone_responsavel","email_responsavel","endereco"]),["user_id"=>$user->id,"numero_aluno"=>"A".str_pad(Aluno::count()+1, 5, "0", STR_PAD_LEFT)]));
             return response()->json(["message"=>"Aluno criado.","aluno"=>$aluno->load($this->relations())], 201);
         });
     }
@@ -56,7 +56,7 @@ class AlunoController extends Controller {
     }
 
     public function update(Request $request, Aluno $aluno) {
-        $aluno->update($request->only(["data_nascimento","genero","naturalidade","nacionalidade","bi","nome_pai","nome_mae","telefone_responsavel","endereco"]));
+        $aluno->update($request->only(["data_nascimento","genero","naturalidade","nacionalidade","bi","nome_pai","nome_mae","telefone_responsavel","email_responsavel","endereco"]));
         $aluno->user->update($request->only(["nome","email","telefone"]));
 
         // Documento extendido — upsert se vier no payload

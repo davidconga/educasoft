@@ -430,10 +430,11 @@ export default function AlunoDetalhe() {
               <div className="space-y-6">
                 <div className="space-y-4">
                   <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Família / Responsável</h3>
-                  <InfoRow icon={Users} label="Nome do Pai"      value={aluno.nome_pai} />
-                  <InfoRow icon={Users} label="Nome da Mãe"      value={aluno.nome_mae} />
-                  <InfoRow icon={Phone} label="Tel. Responsável" value={aluno.telefone_responsavel} />
-                  {!aluno.nome_pai && !aluno.nome_mae && !aluno.telefone_responsavel && (
+                  <InfoRow icon={Users} label="Nome do Pai"        value={aluno.nome_pai} />
+                  <InfoRow icon={Users} label="Nome da Mãe"        value={aluno.nome_mae} />
+                  <InfoRow icon={Phone} label="Tel. Responsável"   value={aluno.telefone_responsavel} />
+                  <InfoRow icon={Mail}  label="Email do Responsável" value={aluno.email_responsavel} />
+                  {!aluno.nome_pai && !aluno.nome_mae && !aluno.telefone_responsavel && !aluno.email_responsavel && (
                     <p className="text-sm text-slate-400">Sem dados de família registados.</p>
                   )}
                 </div>

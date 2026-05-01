@@ -24,6 +24,9 @@ use App\Http\Controllers\Tenant\ClasseController;
 use App\Http\Controllers\Tenant\TurnoController;
 use App\Http\Controllers\Tenant\SalaController;
 use App\Http\Controllers\Tenant\PrecarioController;
+use App\Http\Controllers\Tenant\FinanciadorController;
+use App\Http\Controllers\Tenant\BolsaController;
+use App\Http\Controllers\Tenant\ReciboBolsaController;
 use App\Http\Controllers\Tenant\PasswordResetController;
 use App\Http\Controllers\Tenant\PortalController;
 use App\Http\Controllers\Tenant\ConfiguracaoController;
@@ -32,6 +35,9 @@ use App\Http\Controllers\Tenant\PresencaController;
 use App\Http\Controllers\Tenant\PresencaProfessorController;
 use App\Http\Controllers\Tenant\PublicAlunoController;
 use App\Http\Controllers\Tenant\PublicProvaController;
+use App\Http\Controllers\Tenant\ChatController;
+use App\Http\Controllers\Tenant\ComunidadeController;
+use App\Http\Controllers\Tenant\LembreteController;
 
 Route::prefix("api/tenant")->middleware([InitializeTenant::class, \Illuminate\Routing\Middleware\SubstituteBindings::class])->group(function () {
     Route::post("auth/login", [AuthController::class, "login"]);
@@ -54,6 +60,10 @@ Route::prefix("api/tenant")->middleware([InitializeTenant::class, \Illuminate\Ro
         Route::put("portal/perfil",       [PortalController::class, "atualizarPerfil"]);
         Route::post("portal/perfil/foto", [PortalController::class, "uploadFoto"]);
         Route::post("portal/alterar-senha", [PortalController::class, "alterarSenha"]);
+        Route::get ("portal/notificacoes",            [PortalController::class, "notificacoes"]);
+        Route::get ("portal/notificacoes/contagem",   [PortalController::class, "notificacoesContagem"]);
+        Route::post("portal/notificacoes/lidas",      [PortalController::class, "marcarTodasLidas"]);
+        Route::post("portal/notificacoes/{id}/lida",  [PortalController::class, "marcarNotificacaoLida"]);
         Route::patch("professores/{professor}/reset-senha", [ProfessorController::class, "resetSenha"]);
         Route::patch("professores/{professor}/definir-senha", [ProfessorController::class, "definirSenha"]);
         Route::post("professores/{professor}/foto", [ProfessorController::class, "uploadFoto"]);
@@ -167,5 +177,49 @@ Route::prefix("api/tenant")->middleware([InitializeTenant::class, \Illuminate\Ro
         Route::post("precario/multas", [PrecarioController::class, "storeMulta"]);
         Route::put("precario/multas/{multa}", [PrecarioController::class, "updateMulta"]);
         Route::delete("precario/multas/{multa}", [PrecarioController::class, "destroyMulta"]);
+
+        // Bolseiros
+        Route::apiResource("financiadores", FinanciadorController::class);
+        Route::apiResource("bolsas", BolsaController::class);
+        Route::post("bolsas/{bolsa}/cancelar",  [BolsaController::class, "cancelar"]);
+        Route::post("bolsas/{bolsa}/reactivar", [BolsaController::class, "reactivar"]);
+
+        Route::get ("recibos-bolsa",                      [ReciboBolsaController::class, "index"]);
+        Route::post("recibos-bolsa/emitir",               [ReciboBolsaController::class, "emitir"]);
+        Route::get ("recibos-bolsa/{reciboBolsa}",        [ReciboBolsaController::class, "show"]);
+        Route::get ("recibos-bolsa/{reciboBolsa}/pdf",    [ReciboBolsaController::class, "pdf"]);
+
+        // Chat / Papo Instantâneo
+        Route::get ("chat/conversas",                          [ChatController::class, "conversas"]);
+        Route::get ("chat/sondagem",                           [ChatController::class, "sondagem"]);
+        Route::get ("chat/contactos",                          [ChatController::class, "contactos"]);
+        Route::post("chat/conversas/privada",                  [ChatController::class, "iniciarPrivada"]);
+        Route::post("chat/conversas/turma/{turma}",            [ChatController::class, "iniciarTurma"]);
+        Route::get ("chat/conversas/{conversa}",               [ChatController::class, "showConversa"]);
+        Route::get ("chat/conversas/{conversa}/mensagens",     [ChatController::class, "mensagens"]);
+        Route::post("chat/conversas/{conversa}/mensagens",     [ChatController::class, "enviar"]);
+        Route::post("chat/conversas/{conversa}/lida",          [ChatController::class, "marcarLida"]);
+
+        // Lembretes de pagamento (email + SMS)
+        Route::get ("lembretes",                          [LembreteController::class, "index"]);
+        Route::get ("lembretes/config",                   [LembreteController::class, "config"]);
+        Route::put ("lembretes/config",                   [LembreteController::class, "updateConfig"]);
+        Route::post("lembretes/gerar",                    [LembreteController::class, "gerar"]);
+        Route::post("lembretes/processar",                [LembreteController::class, "processar"]);
+        Route::post("lembretes/teste-sms",                [LembreteController::class, "testarSms"]);
+        Route::post("lembretes/{lembrete}/reenviar",      [LembreteController::class, "reenviar"]);
+        Route::post("pagamentos/{pagamento}/lembrete",    [LembreteController::class, "enviarManual"]);
+
+        // Comunidade Educaja (feed + fórum)
+        Route::get   ("comunidade/feed",                                [ComunidadeController::class, "feed"]);
+        Route::get   ("comunidade/forum/turma/{turma}",                 [ComunidadeController::class, "forumTurma"]);
+        Route::post  ("comunidade/posts",                               [ComunidadeController::class, "criar"]);
+        Route::get   ("comunidade/posts/{post}",                        [ComunidadeController::class, "show"]);
+        Route::put   ("comunidade/posts/{post}",                        [ComunidadeController::class, "actualizar"]);
+        Route::delete("comunidade/posts/{post}",                        [ComunidadeController::class, "apagar"]);
+        Route::post  ("comunidade/posts/{post}/comentarios",            [ComunidadeController::class, "comentar"]);
+        Route::delete("comunidade/comentarios/{comentario}",            [ComunidadeController::class, "apagarComentario"]);
+        Route::post  ("comunidade/posts/{post}/gostar",                 [ComunidadeController::class, "gostar"]);
+        Route::post  ("comunidade/posts/{post}/aceitar/{comentario}",   [ComunidadeController::class, "aceitar"]);
     });
 });

@@ -53,13 +53,22 @@ class FacturaSigner {
         if (!self::keyExists()) self::generateKeyPair();
     }
 
+    /**
+     * Constrói o InvoiceNo no formato AGT: "FR YYYY/N".
+     * Tem de ser idêntico ao que vai para o XML SAFT, senão a verificação falha.
+     */
+    public static function invoiceNoFor(Pagamento $pagamento): string {
+        $ano = optional($pagamento->data_pagamento)->year ?? optional($pagamento->created_at)->year ?? (int) date("Y");
+        return "FR {$ano}/" . $pagamento->id;
+    }
+
     public function signPagamento(Pagamento $pagamento): void {
         self::ensureKey();
         $privateKeyPem = file_get_contents(self::privateKeyPath());
         $privateKey    = openssl_pkey_get_private($privateKeyPem);
         if (!$privateKey) throw new \RuntimeException("Chave privada inválida.");
 
-        // Hash da factura anterior do mesmo tenant (cadeia)
+        // Hash da factura anterior do mesmo tenant (1ª factura → vazio, conforme AGT 5.e)
         $hashAnterior = Pagamento::whereNotNull("assinatura")
             ->orderByDesc("id")
             ->where("id", "<", $pagamento->id)
@@ -67,10 +76,10 @@ class FacturaSigner {
 
         $dataDoc     = optional($pagamento->data_pagamento)->format("Y-m-d") ?? now()->format("Y-m-d");
         $dataSistema = ($pagamento->updated_at ?? now())->format("Y-m-d\TH:i:s");
-        $referencia  = $pagamento->referencia ?? (string) $pagamento->id;
+        $invoiceNo   = self::invoiceNoFor($pagamento); // FR YYYY/N — mesmo valor que vai para o XML
         $total       = number_format((float) $pagamento->valor + (float) ($pagamento->multa_valor ?? 0), 2, ".", "");
 
-        $payload = "{$dataDoc};{$dataSistema};{$referencia};{$total};{$hashAnterior}";
+        $payload = "{$dataDoc};{$dataSistema};{$invoiceNo};{$total};{$hashAnterior}";
         if (!openssl_sign($payload, $assinatura, $privateKey, OPENSSL_ALGO_SHA1)) {
             throw new \RuntimeException("Falha ao assinar: " . openssl_error_string());
         }

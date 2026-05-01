@@ -48,9 +48,15 @@ import CarteiraAluno from "./pages/admin/CarteiraAluno";
 import RelatorioDiario from "./pages/admin/RelatorioDiario";
 import RelatorioFinanceiro from "./pages/admin/RelatorioFinanceiro";
 import FolhaProva from "./pages/admin/FolhaProva";
+import Financiadores from "./pages/admin/Financiadores";
+import Bolsas from "./pages/admin/Bolsas";
+import Lembretes from "./pages/admin/Lembretes";
+import Chat from "./pages/chat/Chat";
+import Comunidade from "./pages/comunidade/Comunidade";
 import PortalLayout from "./pages/portal/PortalLayout";
 import PortalInicio from "./pages/portal/PortalInicio";
 import PortalNotas from "./pages/portal/PortalNotas";
+import PortalNotificacoes from "./pages/portal/PortalNotificacoes";
 import PortalHorario from "./pages/portal/PortalHorario";
 import PortalFinancas from "./pages/portal/PortalFinancas";
 import PortalConta from "./pages/portal/PortalConta";
@@ -131,6 +137,9 @@ function AppRoutes() {
         <Route path="aulas" element={<PortalAulas />} />
         <Route path="financas" element={<PortalFinancas />} />
         <Route path="conta" element={<PortalConta />} />
+        <Route path="chat" element={<Chat />} />
+        <Route path="comunidade" element={<Comunidade />} />
+        <Route path="notificacoes" element={<PortalNotificacoes />} />
       </Route>
 
       {/* Portal do Professor */}
@@ -142,6 +151,8 @@ function AppRoutes() {
         <Route path="aulas" element={<ProfessorAulas />} />
         <Route path="presencas" element={<ProfessorPresencas />} />
         <Route path="conta" element={<ProfessorConta />} />
+        <Route path="chat" element={<Chat />} />
+        <Route path="comunidade" element={<Comunidade />} />
       </Route>
 
       {/* Admin */}
@@ -179,6 +190,11 @@ function AppRoutes() {
       <Route path="/relatorio-diario"      element={<ProtectedRoute><Layout><RelatorioDiario /></Layout></ProtectedRoute>} />
       <Route path="/relatorio-financeiro" element={<ProtectedRoute><Layout><RelatorioFinanceiro /></Layout></ProtectedRoute>} />
       <Route path="/folha-prova"          element={<ProtectedRoute><Layout><FolhaProva /></Layout></ProtectedRoute>} />
+      <Route path="/financiadores"        element={<ProtectedRoute><Layout><Financiadores /></Layout></ProtectedRoute>} />
+      <Route path="/bolsas"               element={<ProtectedRoute><Layout><Bolsas /></Layout></ProtectedRoute>} />
+      <Route path="/lembretes"            element={<ProtectedRoute><Layout><Lembretes /></Layout></ProtectedRoute>} />
+      <Route path="/chat"                 element={<ProtectedRoute><Layout><Chat /></Layout></ProtectedRoute>} />
+      <Route path="/comunidade"           element={<ProtectedRoute><Layout><Comunidade /></Layout></ProtectedRoute>} />
       <Route path="*" element={<Navigate to={loginRedirect ?? "/login"} replace />} />
     </Routes>
   );

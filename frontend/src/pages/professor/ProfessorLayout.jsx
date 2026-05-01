@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useNavigate, Outlet } from "react-router-dom";
-import { LayoutDashboard, Users, BookOpen, Clock, Video, KeyRound, LogOut, Menu, GraduationCap, CalendarCheck } from "lucide-react";
+import { LayoutDashboard, Users, BookOpen, Clock, Video, KeyRound, LogOut, Menu, GraduationCap, CalendarCheck, MessageSquare, Sparkles } from "lucide-react";
 import { useAuthStore } from "../../store/auth";
 import { useBranding } from "../../hooks/useBranding";
 
@@ -11,7 +11,9 @@ const nav = [
   { to: "/professor/presencas",  label: "Presenças",  icon: CalendarCheck },
   { to: "/professor/horario",    label: "Horário",    icon: Clock },
   { to: "/professor/aulas",    label: "Aulas Online",   icon: Video },
-  { to: "/professor/conta",    label: "Minha Conta",    icon: KeyRound },
+  { to: "/professor/chat",        label: "Chat",          icon: MessageSquare },
+  { to: "/professor/comunidade",  label: "Educaja",       icon: Sparkles },
+  { to: "/professor/conta",       label: "Minha Conta",   icon: KeyRound },
 ];
 
 export default function ProfessorLayout() {

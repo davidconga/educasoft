@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useSondagemChat } from "../../hooks/useSondagemChat";
 import {
   LayoutDashboard, Users, GraduationCap, LayoutGrid, FileText,
   Clock, Banknote, Video, Home, BookOpen, BookMarked,
   Tag, CreditCard, LogOut, Bell, Menu, ChevronRight, ClipboardList,
-  Building2, UserCog, CalendarCheck, UserCheck, Wallet, ShieldCheck, CalendarDays, ScrollText, BarChart3,
+  Building2, UserCog, CalendarCheck, UserCheck, Wallet, ShieldCheck, CalendarDays, ScrollText, BarChart3, MessageSquare, BellRing, Sparkles,
 } from "lucide-react";
 import { useAuthStore } from "../../store/auth";
 import { usePermissao } from "../../hooks/usePermissao";
@@ -16,6 +17,8 @@ const navGroups = [
     label: "Principal",
     items: [
       { href: "/dashboard",     label: "Dashboard",     icon: LayoutDashboard, modulo: "dashboard" },
+      { href: "/chat",          label: "Chat",          icon: MessageSquare,   modulo: "dashboard" },
+      { href: "/comunidade",    label: "Educaja",       icon: Sparkles,        modulo: "dashboard" },
     ],
   },
   {
@@ -59,6 +62,9 @@ const navGroups = [
       { href: "/relatorio-diario",     label: "Relatório Diário",     icon: CalendarDays, modulo: "tesouraria" },
       { href: "/relatorio-financeiro", label: "Relatório Financeiro", icon: BarChart3,    modulo: "tesouraria" },
       { href: "/precario",          label: "Preçário",           icon: Tag,       modulo: "precario"          },
+      { href: "/bolsas",            label: "Bolsas de Estudo",   icon: GraduationCap, modulo: "bolsas"        },
+      { href: "/financiadores",     label: "Financiadores",      icon: Building2,  modulo: "bolsas"           },
+      { href: "/lembretes",         label: "Lembretes Propinas", icon: BellRing,   modulo: "lembretes"        },
     ],
   },
 ];
@@ -77,6 +83,7 @@ export default function Layout({ children }) {
 
   const initials = user?.nome?.split(" ").map(n => n[0]).slice(0, 2).join("").toUpperCase() || "U";
   const branding = useBranding();
+  const { naoLidasTotal } = useSondagemChat({ activo: true });
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans">
@@ -194,9 +201,18 @@ export default function Layout({ children }) {
           </button>
 
           <div className="flex items-center gap-3">
-            <button className="relative w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
+            <Link
+              to="/chat"
+              title={naoLidasTotal > 0 ? `${naoLidasTotal} mensagens por ler` : "Chat"}
+              className="relative w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"
+            >
               <Bell size={16} strokeWidth={1.8} />
-            </button>
+              {naoLidasTotal > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-blue-600 text-white text-[10px] font-semibold flex items-center justify-center leading-none">
+                  {naoLidasTotal > 99 ? "99+" : naoLidasTotal}
+                </span>
+              )}
+            </Link>
 
             <div className="w-px h-5 bg-slate-200" />
 

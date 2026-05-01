@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { NavLink, useNavigate, Outlet } from "react-router-dom";
-import { LayoutDashboard, CreditCard, BookOpen, Clock, KeyRound, LogOut, Menu, GraduationCap, Video } from "lucide-react";
+import { NavLink, useNavigate, Outlet, Link } from "react-router-dom";
+import { LayoutDashboard, CreditCard, BookOpen, Clock, KeyRound, LogOut, Menu, GraduationCap, Video, MessageSquare, Sparkles, Bell } from "lucide-react";
 import { useAuthStore } from "../../store/auth";
 import { useBranding } from "../../hooks/useBranding";
+import { useSondagemNotificacoes } from "../../hooks/useSondagemNotificacoes";
 
 const nav = [
   { to: "/portal",          label: "Início",       icon: LayoutDashboard, end: true },
@@ -10,7 +11,10 @@ const nav = [
   { to: "/portal/horario",  label: "Horário",      icon: Clock },
   { to: "/portal/aulas",    label: "Aulas Online", icon: Video },
   { to: "/portal/financas", label: "Finanças",     icon: CreditCard },
-  { to: "/portal/conta",    label: "Minha Conta",  icon: KeyRound },
+  { to: "/portal/notificacoes", label: "Notificações", icon: Bell, badge: "naoLidas" },
+  { to: "/portal/chat",        label: "Chat",        icon: MessageSquare },
+  { to: "/portal/comunidade",  label: "Educaja",     icon: Sparkles },
+  { to: "/portal/conta",       label: "Minha Conta", icon: KeyRound },
 ];
 
 export default function PortalLayout() {
@@ -18,6 +22,7 @@ export default function PortalLayout() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const branding = useBranding();
+  const { naoLidas } = useSondagemNotificacoes({ activo: true });
 
   const handleLogout = () => { logout(); navigate("/login"); };
 
@@ -58,17 +63,25 @@ export default function PortalLayout() {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-0.5">
-          {nav.map(item => (
-            <NavLink key={item.to} to={item.to} end={item.end}
-              onClick={() => setOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors
-                ${isActive ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-800"}`
-              }>
-              <item.icon size={17}/>
-              {item.label}
-            </NavLink>
-          ))}
+          {nav.map(item => {
+            const badgeValue = item.badge === "naoLidas" ? naoLidas : 0;
+            return (
+              <NavLink key={item.to} to={item.to} end={item.end}
+                onClick={() => setOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors
+                  ${isActive ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-800"}`
+                }>
+                <item.icon size={17}/>
+                <span className="flex-1">{item.label}</span>
+                {badgeValue > 0 && (
+                  <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+                    {badgeValue > 99 ? "99+" : badgeValue}
+                  </span>
+                )}
+              </NavLink>
+            );
+          })}
         </nav>
 
         {/* Logout */}
@@ -85,12 +98,22 @@ export default function PortalLayout() {
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Mobile topbar */}
-        <header className="lg:hidden bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3">
-          <button onClick={() => setOpen(true)} className="w-8 h-8 flex items-center justify-center text-slate-600">
+        {/* Topbar */}
+        <header className="bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3 lg:px-6">
+          <button onClick={() => setOpen(true)} className="lg:hidden w-8 h-8 flex items-center justify-center text-slate-600">
             <Menu size={20}/>
           </button>
-          <span className="font-semibold text-slate-800 text-sm">{escola?.nome ?? "Portal do Aluno"}</span>
+          <span className="font-semibold text-slate-800 text-sm lg:hidden">{escola?.nome ?? "Portal do Aluno"}</span>
+          <div className="flex-1" />
+          <Link to="/portal/notificacoes" title="Notificações"
+            className="relative w-9 h-9 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-500 transition-colors">
+            <Bell size={18} />
+            {naoLidas > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+                {naoLidas > 99 ? "99+" : naoLidas}
+              </span>
+            )}
+          </Link>
         </header>
 
         <main className="flex-1 p-6 max-w-5xl mx-auto w-full">
