@@ -5,6 +5,7 @@ import { useAuthStore } from "../../store/auth";
 import { imprimirRecibo, buildReciboHtml } from "../../components/Recibo";
 import { useMeses } from "../../hooks/useMeses";
 import SaftButton from "../../components/SaftButton";
+import ModalVerificarAcademicos from "../../components/ModalVerificarAcademicos";
 
 const enviarLembrete = async (id, canal) => {
   try {
@@ -70,6 +71,8 @@ function MetodoSelector({ value, onChange }) {
 
 /* ── Calendário de Propinas ─────────────────────────────────── */
 function CalendarioPropinas({ alunoSel, onConfirmar }) {
+  const { escola } = useAuthStore();
+  const permiteHist = !!escola?.permite_pago_historico;
   const [anoLetivo, setAnoLetivo]       = useState(ANO_ATUAL);
   const [calendario, setCalendario]     = useState([]);
   const [loading, setLoading]           = useState(false);
@@ -78,6 +81,26 @@ function CalendarioPropinas({ alunoSel, onConfirmar }) {
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
   const [pagandoBulk, setPagandoBulk]   = useState(false);
   const [warnMes, setWarnMes]           = useState(null);
+  const [marcandoHist, setMarcandoHist] = useState(null);
+
+  const marcarHistorico = async (p) => {
+    if (!p) return;
+    if (!confirm(`Marcar como pago (histórico, sem Vendus) — ${p.mes_referencia || p.id}?`)) return;
+    setMarcandoHist(p.id);
+    try {
+      await api.post("/pagamentos/pagar-multiplos-historico", {
+        ids: [p.id],
+        metodo: "dinheiro",
+        data_pagamento: (p.data_vencimento || new Date().toISOString()).slice(0, 10),
+        observacao: "Reposição de dados — marcado pelo admin",
+      });
+      await load();
+    } catch (e) {
+      alert(e.response?.data?.message || "Falha ao marcar histórico.");
+    } finally {
+      setMarcandoHist(null);
+    }
+  };
 
   const load = async () => {
     setLoading(true); setSelCal(new Set());
@@ -247,12 +270,21 @@ function CalendarioPropinas({ alunoSel, onConfirmar }) {
                       )}
                     </td>
                     <td className="px-5 py-3.5 text-right">
-                      {p?.status === "pendente" && (
+                      {(p?.status === "pendente" || p?.status === "vencido") && (
                         <div className="inline-flex items-center gap-2">
                           <button onClick={() => onConfirmar(p.id)}
                             className="text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors">
                             Confirmar
                           </button>
+                          {permiteHist && (
+                            <button
+                              onClick={() => marcarHistorico(p)}
+                              disabled={marcandoHist === p.id}
+                              title="Marcar como pago (histórico local, sem emitir Vendus)"
+                              className="text-xs font-medium text-amber-600 hover:text-amber-800 transition-colors disabled:opacity-50">
+                              {marcandoHist === p.id ? "..." : "📜 Pago"}
+                            </button>
+                          )}
                           <button onClick={() => enviarLembrete(p.id, "email")} title="Enviar lembrete por email"
                             className="text-slate-400 hover:text-blue-600 transition-colors">
                             <Mail size={14} />
@@ -553,6 +585,7 @@ export default function Tesouraria() {
   const [search, setSearch]             = useState("");
   const [loadingAlunos, setLoadingAlunos] = useState(true);
   const [alunoSel, setAlunoSel]         = useState(null);
+  const [showVerifAcad, setShowVerifAcad] = useState(false);
   const [pagamentos, setPagamentos]     = useState([]);
   const [resumo, setResumo]             = useState(null);
   const [loadingDetalhe, setLoadingDetalhe] = useState(false);
@@ -612,6 +645,9 @@ export default function Tesouraria() {
       setResumo(rRes.data);
     } finally {
       setLoadingDetalhe(false);
+    }
+    if (escola?.permite_pago_historico && !aluno.dados_academicos_verificados_em) {
+      setShowVerifAcad(true);
     }
   };
 
@@ -1562,6 +1598,22 @@ export default function Tesouraria() {
           alunoSel={alunoSel}
           onClose={() => setShowGerarEmolumentos(false)}
           onSuccess={() => { recarregarAluno(); }}
+        />
+      )}
+
+      {/* ─── Modal: Verificar dados académicos (Golfinho) ─── */}
+      {showVerifAcad && alunoSel && (
+        <ModalVerificarAcademicos
+          aluno={alunoSel}
+          onClose={() => setShowVerifAcad(false)}
+          onSaved={(alunoActualizado) => {
+            setShowVerifAcad(false);
+            // Actualiza também a entrada na lista para futuras selecções
+            setAlunos(prev => prev.map(a => a.id === alunoActualizado.id ? alunoActualizado : a));
+            // Recarrega tudo com o aluno actualizado (já trazendo dados_academicos_verificados_em
+            // preenchido — selecionarAluno não vai re-disparar o modal)
+            selecionarAluno(alunoActualizado);
+          }}
         />
       )}
     </div>

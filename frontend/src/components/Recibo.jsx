@@ -10,7 +10,7 @@ export function buildReciboHtml(pagamento, escola, carteira = null) {
   const lista = Array.isArray(pagamento) ? pagamento : [pagamento];
   const title = lista.length === 1 ? "Factura-Recibo" : "Recibo de Cobranças";
   const body  = lista.length === 1 ? buildSingle(lista[0], escola, carteira) : buildConsolidado(lista, escola, carteira);
-  return buildFormatWrapper(title, body);
+  return buildFormatWrapper(title, body, escola?.formato_impressao);
 }
 
 function openHtml(html) {
@@ -52,12 +52,12 @@ export function imprimirComprovativoMatricula(matricula, escola) {
   const lista = Array.isArray(matricula) ? matricula : [matricula];
   const title = lista.length === 1 ? "Comprovativo de Matrícula" : "Lista de Matrículas";
   const body  = lista.length === 1 ? buildComprovativoSingle(lista[0], escola) : buildComprovativoConsolidado(lista, escola);
-  openHtml(buildFormatWrapper(title, body));
+  openHtml(buildFormatWrapper(title, body, escola?.formato_impressao));
 }
 
 /* ─── janela de impressão com selector de formato ─────────────── */
 
-function buildFormatWrapper(title, receiptHtml) {
+function buildFormatWrapper(title, receiptHtml, formatoDefault = "a4") {
   return `<!DOCTYPE html>
 <html lang="pt">
 <head>
@@ -157,18 +157,26 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:#1e293b;backgr
   width:72mm;background:#fff;
   border:1px dashed #aaa;
   font-family:'Courier New',Courier,monospace;
-  font-size:11px;color:#000;
+  font-size:13px;color:#000;font-weight:700;
   padding:6mm 4mm;
   margin-bottom:6px;
   display:none;
+  -webkit-font-smoothing:none;
+  text-rendering:geometricPrecision;
 }
 .tk-center{text-align:center;}
-.tk-bold{font-weight:700;}
-.tk-sep{border:none;border-top:1px dashed #999;margin:4px 0;}
-.tk-row{display:flex;justify-content:space-between;padding:2px 0;}
-.tk-label{color:#555;}
-.tk-total{display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding:4px 0;border-top:1px solid #000;margin-top:4px;}
-.tk-sig{margin-top:8mm;border-top:1px solid #999;font-size:9px;color:#555;text-align:center;padding-top:2px;}
+.tk-bold{font-weight:900;}
+.tk-sep{border:none;border-top:1.5px dashed #000;margin:5px 0;}
+.tk-row{display:flex;justify-content:space-between;padding:3px 0;gap:6px;font-weight:700;}
+.tk-label{color:#000;font-weight:700;}
+.tk-row span:last-child{font-weight:800;text-align:right;}
+.tk-item{padding:3px 0;border-bottom:1px dotted #aaa;}
+.tk-item:last-child{border-bottom:none;}
+.tk-item-desc{font-weight:800;font-size:13px;}
+.tk-item-mes{font-size:12px;font-weight:700;color:#000;margin-top:1px;}
+.tk-item-val{display:flex;justify-content:space-between;font-size:13px;font-weight:800;margin-top:1px;}
+.tk-total{display:flex;justify-content:space-between;font-size:15px;font-weight:900;padding:5px 0;border-top:2px solid #000;border-bottom:2px solid #000;margin-top:5px;}
+.tk-sig{margin-top:8mm;border-top:1px solid #000;font-size:10px;color:#000;font-weight:700;text-align:center;padding-top:2px;}
 
 /* ─────── print ─────── */
 @media print{
@@ -187,7 +195,8 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:#1e293b;backgr
     <span class="fmt-label">Formato:</span>
     <button id="btn-a4"     class="fmt-btn" onclick="setFmt('a4')">A4</button>
     <button id="btn-a5"     class="fmt-btn" onclick="setFmt('a5')">A5</button>
-    <button id="btn-ticket" class="fmt-btn active" onclick="setFmt('ticket')">Ticket</button>
+    <button id="btn-ticket" class="fmt-btn" onclick="setFmt('ticket')">Ticket (POS)</button>
+    <span id="fmt-config" style="color:#94a3b8;font-size:11px;margin-left:8px"></span>
   </div>
   <button class="print-btn" onclick="window.print()">&#128438; Imprimir</button>
 </div>
@@ -241,7 +250,10 @@ function setFmt(f) {
   });
 }
 
-setFmt('ticket');
+var DEFAULT_FMT = ${JSON.stringify(["a4","a5","ticket"].includes(formatoDefault) ? formatoDefault : "a4")};
+console.log('[Educajá] Formato configurado:', DEFAULT_FMT);
+document.getElementById('fmt-config').textContent = '(configurado: ' + DEFAULT_FMT.toUpperCase() + ')';
+setFmt(DEFAULT_FMT);
 </script>
 </body>
 </html>`;
@@ -250,6 +262,14 @@ setFmt('ticket');
 /* ─── helpers ─────────────────────────────────────────────────── */
 
 function fmt(v) { return Number(v || 0).toLocaleString("pt-AO") + " Kz"; }
+function buildQrUrl(p, escola, size = 160) {
+  const codigo = escola?.codigo || "esc";
+  const ref    = p.referencia || `PAG-${p.id}`;
+  const hash   = p.hash_factura || "";
+  const origin = (typeof window !== "undefined" && window.location?.origin) ? window.location.origin : "";
+  const data = `${origin}/verificar-recibo/${codigo}/${encodeURIComponent(ref)}${hash ? `?h=${hash}` : ""}`;
+  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&qzone=2&data=${encodeURIComponent(data)}`;
+}
 function fmtDate(d) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("pt-AO", { day:"2-digit", month:"2-digit", year:"numeric" });
@@ -257,10 +277,56 @@ function fmtDate(d) {
 function tipoLabel(t) {
   return { mensalidade:"Mensalidade", matricula:"Matrícula", emolumento:"Emolumento", outro:"Outro" }[t] || t;
 }
+const NOMES_MES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+function fmtMesRef(mr) {
+  if (!mr) return "";
+  let m = String(mr).match(/^(\d{4})-(\d{1,2})$/);
+  if (m) {
+    const idx = parseInt(m[2], 10) - 1;
+    if (idx >= 0 && idx < 12) return `${NOMES_MES[idx]} ${m[1]}`;
+  }
+  return String(mr);
+}
 function metodoPag(m) {
   return { dinheiro:"Dinheiro", transferencia:"Transferência Bancária", multicaixa:"Multicaixa" }[m] || m || "—";
 }
 const hoje = new Date().toLocaleDateString("pt-AO");
+
+export function pickMatricula(aluno) {
+  const lista = aluno?.matriculas || [];
+  if (!lista.length) return null;
+  const score = (m) => {
+    let s = 0;
+    if (m?.status === "activa")     s += 100;
+    if (m?.status === "confirmada") s += 80;
+    const ano = String(m?.ano_letivo || m?.turma?.ano_letivo || "");
+    const m4  = ano.match(/(\d{4})/g);
+    if (m4 && m4.length) s += parseInt(m4[m4.length - 1], 10);
+    s += (m?.id || 0) / 1e9;
+    return s;
+  };
+  return [...lista].sort((a, b) => score(b) - score(a))[0];
+}
+
+function anoLectivoDeMes(mesRef) {
+  if (!mesRef) return "";
+  const m = String(mesRef).match(/(\d{4})-(\d{2})/);
+  if (m) {
+    const ano = parseInt(m[1], 10);
+    const mes = parseInt(m[2], 10);
+    return mes >= 9 ? `${ano}-${ano + 1}` : `${ano - 1}-${ano}`;
+  }
+  const anos = String(mesRef).match(/\d{4}/g);
+  if (anos && anos.length === 1) return `${anos[0]}-${parseInt(anos[0], 10) + 1}`;
+  return "";
+}
+
+function resolveAnoLectivo(matricula, turma, pagamento) {
+  return matricula?.ano_letivo
+      || turma?.ano_letivo
+      || anoLectivoDeMes(pagamento?.mes_referencia)
+      || "—";
+}
 
 function buildLogo(escola, nome) {
   if (escola?.logo) {
@@ -276,28 +342,48 @@ function buildLogo(escola, nome) {
 function buildTicketSingle(p, escola) {
   const escolaNome = escola?.nome || "Educajá";
   const logoImg    = escola?.logo
-    ? `<img src="${window.location.origin}/storage/${escola.logo}" style="height:30px;object-fit:contain;" onerror="this.style.display='none'"/><br/>`
+    ? `<img src="${window.location.origin}/storage/${escola.logo}" style="height:72px;max-width:60mm;object-fit:contain;margin-bottom:3px;" onerror="this.style.display='none'"/><br/>`
     : "";
   const aluno    = p.aluno?.user?.nome || "—";
-  const numAluno = p.aluno?.numero_aluno || "";
-  const descricao = tipoLabel(p.tipo) + (p.mes_referencia ? ` ${p.mes_referencia}` : "");
+  const numAluno = p.aluno?.numero_aluno || "—";
+  const matricula = pickMatricula(p.aluno);
+  const turmaT    = matricula?.turma;
+  const cursoT    = turmaT?.classe?.curso?.nome || "—";
+  const classeT   = turmaT?.classe?.nome || "—";
+  const turmaNome = turmaT?.nome || "—";
+  const turnoT    = turmaT?.turnoObj?.nome || turmaT?.turno || "—";
+  const anoLectT  = resolveAnoLectivo(matricula, turmaT, p);
   return `
 <div class="ticket">
-  <div class="tk-center">${logoImg}<div class="tk-bold">${escolaNome}</div><div style="font-size:9px;">Sistema de Gestão Escolar</div></div>
+  <div class="tk-center">${logoImg}<div class="tk-bold" style="font-size:14px;">${escolaNome}</div><div style="font-size:10px;font-weight:700;">Sistema de Gestão Escolar</div></div>
   <hr class="tk-sep"/>
-  <div class="tk-center tk-bold" style="font-size:12px;">FACTURA-RECIBO</div>
-  <div class="tk-center" style="font-size:9px;color:#555;">Nº ${p.referencia || "—"}</div>
+  <div class="tk-center tk-bold" style="font-size:14px;">FACTURA-RECIBO</div>
+  <div class="tk-center" style="font-size:11px;font-weight:700;">Nº ${p.referencia || "—"}</div>
   <hr class="tk-sep"/>
   <div class="tk-row"><span class="tk-label">Aluno:</span><span>${aluno}</span></div>
-  ${numAluno ? `<div class="tk-row"><span class="tk-label">Nº:</span><span>${numAluno}</span></div>` : ""}
-  <div class="tk-row"><span class="tk-label">Turma:</span><span>${p.aluno?.matriculas?.[0]?.turma?.nome || "—"}</span></div>
+  <div class="tk-row"><span class="tk-label">Nº:</span><span>${numAluno}</span></div>
+  <div class="tk-row"><span class="tk-label">Curso:</span><span>${cursoT}</span></div>
+  <div class="tk-row"><span class="tk-label">Classe:</span><span>${classeT}</span></div>
+  <div class="tk-row"><span class="tk-label">Turma:</span><span>${turmaNome}</span></div>
+  <div class="tk-row"><span class="tk-label">Turno:</span><span>${turnoT}</span></div>
+  <div class="tk-row"><span class="tk-label">Ano Lect.:</span><span>${anoLectT}</span></div>
   <hr class="tk-sep"/>
-  <div class="tk-row"><span class="tk-label">Descrição:</span><span>${descricao}</span></div>
+  <div class="tk-center tk-bold" style="font-size:12px;">DESCRIÇÃO</div>
+  <hr class="tk-sep"/>
+  <div class="tk-item">
+    <div class="tk-item-desc">${tipoLabel(p.tipo)}</div>
+    ${p.mes_referencia ? `<div class="tk-item-mes">Mês pago: ${fmtMesRef(p.mes_referencia)}</div>` : ""}
+    <div class="tk-item-val"><span>Valor:</span><span>${fmt(p.valor)}</span></div>
+  </div>
+  <hr class="tk-sep"/>
   <div class="tk-row"><span class="tk-label">Método:</span><span>${metodoPag(p.metodo)}</span></div>
   <div class="tk-row"><span class="tk-label">Data Pag.:</span><span>${fmtDate(p.data_pagamento)}</span></div>
   <div class="tk-row"><span class="tk-label">Emissão:</span><span>${hoje}</span></div>
-  <hr class="tk-sep"/>
   <div class="tk-total"><span>TOTAL</span><span>${fmt(p.valor)}</span></div>
+  <div style="text-align:center;margin-top:6mm;">
+    <img src="${buildQrUrl(p, escola, 110)}" alt="QR" style="width:24mm;height:24mm;"/>
+    <div style="font-size:8px;color:#666;margin-top:2px;">Verificar autenticidade</div>
+  </div>
   <div class="tk-sig">Tesoureiro(a)</div>
   <div class="tk-sig">Encarregado / Aluno</div>
 </div>`;
@@ -306,22 +392,48 @@ function buildTicketSingle(p, escola) {
 function buildTicketConsolidado(pagamentos, escola) {
   const escolaNome = escola?.nome || "Educajá";
   const logoImg    = escola?.logo
-    ? `<img src="${window.location.origin}/storage/${escola.logo}" style="height:30px;object-fit:contain;" onerror="this.style.display='none'"/><br/>`
+    ? `<img src="${window.location.origin}/storage/${escola.logo}" style="height:72px;max-width:60mm;object-fit:contain;margin-bottom:3px;" onerror="this.style.display='none'"/><br/>`
     : "";
   const total = pagamentos.reduce((s, p) => s + Number(p.valor || 0), 0);
-  const linhas = pagamentos.map(p =>
-    `<div class="tk-row"><span>${tipoLabel(p.tipo)}${p.mes_referencia?" "+p.mes_referencia:""}</span><span>${fmt(p.valor)}</span></div>`
-  ).join("");
+  const alunoIds = [...new Set(pagamentos.map(p => p.aluno?.id).filter(Boolean))];
+  const mesmoAluno = alunoIds.length === 1;
+  const primeiro   = pagamentos[0]?.aluno;
+  const matricula  = pickMatricula(primeiro);
+  const turmaT     = matricula?.turma;
+  const cabecalhoAluno = mesmoAluno ? `
+  <div class="tk-row"><span class="tk-label">Aluno:</span><span>${primeiro?.user?.nome || "—"}</span></div>
+  <div class="tk-row"><span class="tk-label">Nº:</span><span>${primeiro?.numero_aluno || "—"}</span></div>
+  <div class="tk-row"><span class="tk-label">Curso:</span><span>${turmaT?.classe?.curso?.nome || "—"}</span></div>
+  <div class="tk-row"><span class="tk-label">Classe:</span><span>${turmaT?.classe?.nome || "—"}</span></div>
+  <div class="tk-row"><span class="tk-label">Turma:</span><span>${turmaT?.nome || "—"}</span></div>
+  <div class="tk-row"><span class="tk-label">Turno:</span><span>${turmaT?.turnoObj?.nome || turmaT?.turno || "—"}</span></div>
+  <div class="tk-row"><span class="tk-label">Ano Lect.:</span><span>${resolveAnoLectivo(matricula, turmaT, pagamentos[0])}</span></div>
+  <hr class="tk-sep"/>` : "";
+  const linhas = pagamentos.map(p => {
+    const nomeAluno = !mesmoAluno ? `<div class="tk-item-mes" style="font-size:11px;">Aluno: ${p.aluno?.user?.nome || "—"}</div>` : "";
+    return `<div class="tk-item">
+      <div class="tk-item-desc">${tipoLabel(p.tipo)}</div>
+      ${p.mes_referencia ? `<div class="tk-item-mes">Mês pago: ${fmtMesRef(p.mes_referencia)}</div>` : ""}
+      ${nomeAluno}
+      <div class="tk-item-val"><span>Valor:</span><span>${fmt(p.valor)}</span></div>
+    </div>`;
+  }).join("");
   return `
 <div class="ticket">
-  <div class="tk-center">${logoImg}<div class="tk-bold">${escolaNome}</div></div>
+  <div class="tk-center">${logoImg}<div class="tk-bold" style="font-size:14px;">${escolaNome}</div><div style="font-size:10px;font-weight:700;">Sistema de Gestão Escolar</div></div>
   <hr class="tk-sep"/>
-  <div class="tk-center tk-bold">RECIBO DE COBRANÇAS</div>
-  <div class="tk-center" style="font-size:9px;color:#555;">${pagamentos.length} pagamento(s) · ${hoje}</div>
+  <div class="tk-center tk-bold" style="font-size:14px;">RECIBO DE COBRANÇAS</div>
+  <div class="tk-center" style="font-size:11px;font-weight:700;">${pagamentos.length} pagamento(s) · ${hoje}</div>
+  <hr class="tk-sep"/>
+  ${cabecalhoAluno}
+  <div class="tk-center tk-bold" style="font-size:12px;">DESCRIÇÃO DOS SERVIÇOS</div>
   <hr class="tk-sep"/>
   ${linhas}
-  <hr class="tk-sep"/>
   <div class="tk-total"><span>TOTAL</span><span>${fmt(total)}</span></div>
+  <div style="text-align:center;margin-top:6mm;">
+    <img src="${buildQrUrl(pagamentos[0], escola, 110)}" alt="QR" style="width:24mm;height:24mm;"/>
+    <div style="font-size:8px;color:#666;margin-top:2px;">${pagamentos[0]?.lote_id || ""}</div>
+  </div>
   <div class="tk-sig">Tesoureiro(a)</div>
   <div class="tk-sig">Encarregado / Aluno</div>
 </div>`;
@@ -330,7 +442,7 @@ function buildTicketConsolidado(pagamentos, escola) {
 function buildTicketMatricula(m, escola) {
   const escolaNome = escola?.nome || "Educajá";
   const logoImg    = escola?.logo
-    ? `<img src="${window.location.origin}/storage/${escola.logo}" style="height:30px;object-fit:contain;" onerror="this.style.display='none'"/><br/>`
+    ? `<img src="${window.location.origin}/storage/${escola.logo}" style="height:72px;max-width:60mm;object-fit:contain;margin-bottom:3px;" onerror="this.style.display='none'"/><br/>`
     : "";
   return `
 <div class="ticket">
@@ -358,8 +470,8 @@ function buildSingle(p, escola, carteira = null) {
   const escolaNome = escola?.nome || "Educajá";
   const aluno      = p.aluno?.user?.nome || "—";
   const numAluno   = p.aluno?.numero_aluno || "";
-  const turma      = p.aluno?.matriculas?.[0]?.turma?.nome || "—";
-  const descricao  = tipoLabel(p.tipo) + (p.mes_referencia ? ` — ${p.mes_referencia}` : "");
+  const turma      = pickMatricula(p.aluno)?.turma?.nome || "—";
+  const descricao  = tipoLabel(p.tipo) + (p.mes_referencia ? ` — ${fmtMesRef(p.mes_referencia)}` : "");
 
   return `
 ${buildTicketSingle(p, escola)}
@@ -405,9 +517,15 @@ ${buildTicketSingle(p, escola)}
     </tr></tfoot>
   </table>
   ${buildCarteiraBlock(carteira)}
-  <div class="assinaturas">
-    <div class="ass-bloco"><div class="ass-linha"></div><div class="ass-label">Tesoureiro(a)</div></div>
-    <div class="ass-bloco"><div class="ass-linha"></div><div class="ass-label">Encarregado de Educação / Aluno</div></div>
+  <div style="display:flex;align-items:flex-end;gap:24px;padding:8px 28px 16px">
+    <div style="flex:1;display:flex;gap:40px;">
+      <div style="flex:1"><div class="ass-linha" style="height:1px;background:#94a3b8;margin-top:36px;margin-bottom:6px;"></div><div class="ass-label">Tesoureiro(a)</div></div>
+      <div style="flex:1"><div class="ass-linha" style="height:1px;background:#94a3b8;margin-top:36px;margin-bottom:6px;"></div><div class="ass-label">Encarregado de Educação / Aluno</div></div>
+    </div>
+    <div style="text-align:center;">
+      <img src="${buildQrUrl(p, escola)}" alt="QR" style="width:90px;height:90px;border:1px solid #e5e7eb;padding:3px;border-radius:4px;background:#fff;"/>
+      <div style="font-size:8px;color:#94a3b8;margin-top:3px;">Verificar autenticidade</div>
+    </div>
   </div>
   <div class="rodape">Documento emitido electronicamente pelo sistema Educajá &nbsp;·&nbsp; ${hoje}</div>
 </div>`;
@@ -427,7 +545,7 @@ function buildConsolidado(pagamentos, escola, carteira = null) {
   const linhas = pagamentos.map(p => `
     <tr>
       ${!mesmAluno ? `<td>${p.aluno?.user?.nome || "—"}</td>` : ""}
-      <td>${tipoLabel(p.tipo)}${p.mes_referencia ? ` — ${p.mes_referencia}` : ""}</td>
+      <td>${tipoLabel(p.tipo)}${p.mes_referencia ? ` — ${fmtMesRef(p.mes_referencia)}` : ""}</td>
       <td class="td-mono">${p.referencia || "—"}</td>
       <td>${metodoPag(p.metodo)}</td>
       <td class="td-right">${fmt(p.valor)}</td>
@@ -439,7 +557,7 @@ function buildConsolidado(pagamentos, escola, carteira = null) {
     <div class="aluno-box">
       <div class="aluno-row"><span class="aluno-label">Nome completo</span><span class="aluno-value">${primeiro?.user?.nome || "—"}</span></div>
       ${primeiro?.numero_aluno ? `<div class="aluno-row"><span class="aluno-label">Nº de Aluno</span><span class="aluno-value">${primeiro.numero_aluno}</span></div>` : ""}
-      <div class="aluno-row"><span class="aluno-label">Turma</span><span class="aluno-value">${primeiro?.matriculas?.[0]?.turma?.nome || "—"}</span></div>
+      <div class="aluno-row"><span class="aluno-label">Turma</span><span class="aluno-value">${pickMatricula(primeiro)?.turma?.nome || "—"}</span></div>
     </div>` : "";
 
   return `
@@ -479,9 +597,15 @@ ${buildTicketConsolidado(pagamentos, escola)}
     </tr></tfoot>
   </table>
   ${buildCarteiraBlock(carteira)}
-  <div class="assinaturas">
-    <div class="ass-bloco"><div class="ass-linha"></div><div class="ass-label">Tesoureiro(a)</div></div>
-    <div class="ass-bloco"><div class="ass-linha"></div><div class="ass-label">Encarregado de Educação / Aluno</div></div>
+  <div style="display:flex;align-items:flex-end;gap:24px;padding:8px 28px 16px">
+    <div style="flex:1;display:flex;gap:40px;">
+      <div style="flex:1"><div style="height:1px;background:#94a3b8;margin-top:36px;margin-bottom:6px;"></div><div class="ass-label">Tesoureiro(a)</div></div>
+      <div style="flex:1"><div style="height:1px;background:#94a3b8;margin-top:36px;margin-bottom:6px;"></div><div class="ass-label">Encarregado de Educação / Aluno</div></div>
+    </div>
+    <div style="text-align:center;">
+      <img src="${buildQrUrl(pagamentos[0], escola)}" alt="QR" style="width:90px;height:90px;border:1px solid #e5e7eb;padding:3px;border-radius:4px;background:#fff;"/>
+      <div style="font-size:8px;color:#94a3b8;margin-top:3px;">Verificar lote: ${pagamentos[0]?.lote_id || pagamentos[0]?.referencia || ""}</div>
+    </div>
   </div>
   <div class="rodape">Documento emitido electronicamente pelo sistema Educajá &nbsp;·&nbsp; ${hoje}</div>
 </div>`;

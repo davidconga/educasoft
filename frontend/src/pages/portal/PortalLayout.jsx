@@ -4,6 +4,7 @@ import { LayoutDashboard, CreditCard, BookOpen, Clock, KeyRound, LogOut, Menu, G
 import { useAuthStore } from "../../store/auth";
 import { useBranding } from "../../hooks/useBranding";
 import { useSondagemNotificacoes } from "../../hooks/useSondagemNotificacoes";
+import { useSondagemChat } from "../../hooks/useSondagemChat";
 
 const nav = [
   { to: "/portal",          label: "Início",       icon: LayoutDashboard, end: true },
@@ -12,7 +13,7 @@ const nav = [
   { to: "/portal/aulas",    label: "Aulas Online", icon: Video },
   { to: "/portal/financas", label: "Finanças",     icon: CreditCard },
   { to: "/portal/notificacoes", label: "Notificações", icon: Bell, badge: "naoLidas" },
-  { to: "/portal/chat",        label: "Chat",        icon: MessageSquare },
+  { to: "/portal/chat",        label: "Chat",        icon: MessageSquare, badge: "chat" },
   { to: "/portal/comunidade",  label: "Educaja",     icon: Sparkles },
   { to: "/portal/conta",       label: "Minha Conta", icon: KeyRound },
 ];
@@ -23,6 +24,7 @@ export default function PortalLayout() {
   const [open, setOpen] = useState(false);
   const branding = useBranding();
   const { naoLidas } = useSondagemNotificacoes({ activo: true });
+  const { naoLidasTotal: chatNaoLidas } = useSondagemChat({ activo: true });
 
   const handleLogout = () => { logout(); navigate("/login"); };
 
@@ -64,7 +66,9 @@ export default function PortalLayout() {
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-0.5">
           {nav.map(item => {
-            const badgeValue = item.badge === "naoLidas" ? naoLidas : 0;
+            const badgeValue = item.badge === "naoLidas" ? naoLidas
+              : item.badge === "chat" ? chatNaoLidas
+              : 0;
             return (
               <NavLink key={item.to} to={item.to} end={item.end}
                 onClick={() => setOpen(false)}

@@ -10,6 +10,7 @@ export default function Perfil() {
   const authToken = useAuthStore(s => s.token);
   const authEscola = useAuthStore(s => s.escola);
   const authTenantId = useAuthStore(s => s.tenantId);
+  const authPlano = useAuthStore(s => s.plano);
 
   const [perfil, setPerfil] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -55,7 +56,7 @@ export default function Perfil() {
     try {
       const r = await api.put("/portal/perfil", form);
       // Atualiza auth store com nome/email novos
-      setAuth(authToken, r.data.user, authEscola, authTenantId);
+      setAuth(authToken, r.data.user, authEscola, authTenantId, authPlano);
       showMsg(setMsg, "Perfil actualizado.");
       load();
     } catch (err) {

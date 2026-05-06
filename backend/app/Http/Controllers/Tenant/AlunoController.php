@@ -92,6 +92,79 @@ class AlunoController extends Controller {
         return response()->json(["message" => "Senha definida com sucesso."]);
     }
 
+    /**
+     * Reposição de dados (Golfinho): valida/actualiza turma da matrícula activa
+     * e marca os dados académicos do aluno como verificados.
+     */
+    public function verificarDadosAcademicos(Request $request, Aluno $aluno) {
+        $escola = $request->attributes->get("escola");
+        if (!$escola || !$escola->permite_pago_historico) {
+            return response()->json(["message" => "Funcionalidade não disponível para esta escola."], 403);
+        }
+
+        $request->validate([
+            "turma_id"   => "required|exists:turmas,id",
+            "ano_letivo" => "nullable|string|max:20",
+        ]);
+
+        $anoAlvo = $request->ano_letivo ?: "2025-2026";
+        $authNome = $request->attributes->get("auth_user")?->nome ?? "Sistema";
+        $obs = "Concluída automaticamente — aluno verificado em {$anoAlvo} por {$authNome} a " . now()->format("d/m/Y H:i");
+
+        // 1) Fecha outras matriculas activas/em curso de outros anos lectivos.
+        \App\Models\Tenant\Matricula::where("aluno_id", $aluno->id)
+            ->where("ano_letivo", "!=", $anoAlvo)
+            ->whereIn("status", ["activa", "confirmada", "pendente"])
+            ->update([
+                "status"     => "concluida",
+                "observacao" => $obs,
+            ]);
+
+        // 2) Procura matricula existente para o ano alvo (qualquer estado).
+        $matAno = \App\Models\Tenant\Matricula::where("aluno_id", $aluno->id)
+            ->where("ano_letivo", $anoAlvo)
+            ->orderByRaw("FIELD(status,'activa','confirmada','pendente','concluida','transferida','cancelada')")
+            ->orderByDesc("id")
+            ->first();
+
+        if ($matAno) {
+            // Existe → actualiza turma e garante que está activa.
+            $matAno->update([
+                "turma_id" => $request->turma_id,
+                "status"   => "activa",
+            ]);
+        } else {
+            // Não existe → cria nova matricula activa para o ano alvo.
+            \App\Models\Tenant\Matricula::create([
+                "aluno_id"       => $aluno->id,
+                "turma_id"       => $request->turma_id,
+                "ano_letivo"     => $anoAlvo,
+                "status"         => "activa",
+                "data_matricula" => now()->toDateString(),
+                "observacao"     => "Criada via verificação de dados académicos por {$authNome} a " . now()->format("d/m/Y H:i"),
+            ]);
+        }
+
+        $aluno->update(["dados_academicos_verificados_em" => now()]);
+        return response()->json([
+            "message" => "Dados académicos verificados.",
+            "aluno"   => $aluno->fresh()->load($this->relations()),
+        ]);
+    }
+
+    /** Reset (uso de teste): limpa a flag de verificação académica do aluno. */
+    public function resetVerificacaoAcademica(Request $request, Aluno $aluno) {
+        $escola = $request->attributes->get("escola");
+        if (!$escola || !$escola->permite_pago_historico) {
+            return response()->json(["message" => "Funcionalidade não disponível para esta escola."], 403);
+        }
+        $aluno->update(["dados_academicos_verificados_em" => null]);
+        return response()->json([
+            "message" => "Verificação académica resetada — modal vai abrir na próxima selecção.",
+            "aluno"   => $aluno->fresh()->load($this->relations()),
+        ]);
+    }
+
     public function destroy(Aluno $aluno) {
         if ($aluno->foto) Storage::disk("public")->delete($aluno->foto);
         $aluno->user->delete();

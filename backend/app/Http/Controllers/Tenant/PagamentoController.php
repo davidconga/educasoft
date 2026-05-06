@@ -8,7 +8,9 @@ use App\Models\Tenant\PlanoPagamento;
 use App\Models\Tenant\PrecarioPropina;
 use App\Models\Tenant\PrecarioEmolumento;
 use App\Models\Tenant\PrecarioMulta;
+use App\Services\Central\VendusEmitter;
 use App\Services\Tenant\FacturaSigner;
+use App\Services\Tenant\MultaCalculator;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
@@ -17,7 +19,14 @@ class PagamentoController extends Controller {
     private static $MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
     public function index(Request $request) {
-        $query = Pagamento::with("aluno.user","plano","propina","emolumento");
+        $query = Pagamento::with(
+            "aluno.user",
+            "aluno.matriculas.turma.classe.curso",
+            "aluno.matriculas.turma.turnoObj",
+            "plano",
+            "propina",
+            "emolumento"
+        );
         if ($request->aluno_id)       $query->where("aluno_id",      $request->aluno_id);
         if ($request->status)         $query->where("status",        $request->status);
         if ($request->tipo)           $query->where("tipo",          $request->tipo);
@@ -38,35 +47,7 @@ class PagamentoController extends Controller {
      * aplicando a regra de PrecarioMulta compatível com o escopo. Anexa via setAttribute (não persiste).
      */
     private function aplicarMultas($pagamentos): void {
-        $multas = PrecarioMulta::where("ativo", true)->get();
-        if ($multas->isEmpty()) return;
-        $hoje = Carbon::today();
-
-        foreach ($pagamentos as $pag) {
-            if ($pag->status === "pago" || $pag->status === "cancelado" || $pag->status === "estornado") continue;
-            if (!$pag->data_vencimento) continue;
-            $dv = Carbon::parse($pag->data_vencimento);
-            $diasAtraso = $hoje->diffInDays($dv, false) * -1; // positivo = em atraso
-            if ($diasAtraso <= 0) continue;
-
-            $multa = $multas->first(function ($m) use ($pag, $diasAtraso) {
-                if ($m->aplicar_em && $m->aplicar_em !== $pag->tipo) return false;
-                if ($diasAtraso < (int)($m->dias_carencia ?? 0)) return false;
-                return true;
-            });
-            if (!$multa) continue;
-
-            $valor = strtolower($multa->tipo_calculo) === "percentagem"
-                ? round((float)$pag->valor * (float)$multa->valor / 100, 2)
-                : (float)$multa->valor;
-
-            // Apenas colunas reais — qualquer outra propriedade via __set viraria atributo
-            // e o Eloquent tentaria gravá-la em colunas que não existem (SQL error).
-            $pag->multa_valor = $valor;
-            $pag->multa_id    = $multa->id;
-            // A relação não vai como atributo, então é seguro anexar para a UI ler propina/multa
-            $pag->setRelation("multa", $multa);
-        }
+        MultaCalculator::aplicar($pagamentos);
     }
 
     /**
@@ -131,11 +112,16 @@ class PagamentoController extends Controller {
         );
         $pag = Pagamento::create($data);
         if (\App\Services\Tenant\BolsaApplier::aplicar($pag) > 0) $pag->save();
-        return response()->json($pag->load("aluno.user","plano","propina","emolumento","bolsa","financiador"), 201);
+        return response()->json($pag->load(
+            "aluno.user",
+            "aluno.matriculas.turma.classe.curso",
+            "aluno.matriculas.turma.turnoObj",
+            "plano","propina","emolumento","bolsa","financiador"
+        ), 201);
     }
 
     public function show(Pagamento $pagamento) {
-        return response()->json($pagamento->load("aluno.user", "aluno.matriculas.turma"));
+        return response()->json($pagamento->load("aluno.user", "aluno.matriculas.turma.classe.curso", "aluno.matriculas.turma.turnoObj"));
     }
 
     public function pagar(Request $request, Pagamento $pagamento) {
@@ -179,6 +165,23 @@ class PagamentoController extends Controller {
             Log::warning("Falha ao assinar factura {$pagamento->id}: " . $e->getMessage());
         }
 
+        // Vincula à sessão de caixa do operador (se houver)
+        try {
+            CaixaController::registarPagamentoNaSessao($pagamento->fresh(), $request->attributes->get("auth_user"));
+        } catch (\Throwable $e) {
+            Log::warning("Falha registar pagamento na caixa: " . $e->getMessage());
+        }
+
+        // Auto-emissão Vendus (best-effort; só corre se a escola tiver Vendus activo)
+        $escola = $request->attributes->get("escola");
+        if ($escola && $escola->vendus_ativo) {
+            try {
+                (new VendusEmitter())->emitirPagamento($pagamento->fresh()->load("aluno.user","emolumento"), $escola);
+            } catch (\Throwable $e) {
+                Log::warning("Falha auto-emissão Vendus pagamento {$pagamento->id}: " . $e->getMessage());
+            }
+        }
+
         // Troco → regista como crédito na carteira do aluno (considera multa no total devido)
         if ($request->filled('valor_entregue')) {
             $totalDevido = (float) $pagamento->valor + (float) ($pagamento->multa_valor ?? 0);
@@ -199,7 +202,7 @@ class PagamentoController extends Controller {
 
         return response()->json([
             "message"   => "Pagamento confirmado.",
-            "pagamento" => $pagamento->fresh()->load("aluno.user", "aluno.matriculas.turma"),
+            "pagamento" => $pagamento->fresh()->load("aluno.user", "aluno.matriculas.turma.classe.curso", "aluno.matriculas.turma.turnoObj"),
         ]);
     }
 
@@ -243,8 +246,25 @@ class PagamentoController extends Controller {
             Log::warning("Falha ao assinar facturas do lote: " . $e->getMessage());
         }
 
+        // Vincula cada pagamento do lote à sessão de caixa do operador (se houver)
+        $authUser = $request->attributes->get("auth_user");
+        foreach (Pagamento::whereIn("id", $request->ids)->get() as $p) {
+            try { CaixaController::registarPagamentoNaSessao($p, $authUser); }
+            catch (\Throwable $e) { Log::warning("Falha registar pagamento na caixa: " . $e->getMessage()); }
+        }
+
+        // Auto-emissão Vendus (best-effort) para cada pagamento do lote
+        $escola = $request->attributes->get("escola");
+        if ($escola && $escola->vendus_ativo) {
+            $emitter = new VendusEmitter();
+            foreach (Pagamento::whereIn("id", $request->ids)->with("aluno.user","emolumento")->get() as $p) {
+                try { $emitter->emitirPagamento($p, $escola); }
+                catch (\Throwable $e) { Log::warning("Falha auto-emissão Vendus pagamento {$p->id}: " . $e->getMessage()); }
+            }
+        }
+
         $pagamentos = Pagamento::whereIn("id", $request->ids)
-            ->with("aluno.user", "aluno.matriculas.turma")
+            ->with("aluno.user", "aluno.matriculas.turma.classe.curso", "aluno.matriculas.turma.turnoObj")
             ->get();
 
         // Troco → regista como crédito na carteira do aluno (considera multas)
@@ -270,6 +290,61 @@ class PagamentoController extends Controller {
             "message"    => "Confirmados {$pagamentos->count()} pagamento(s).",
             "confirmados"=> $pagamentos->count(),
             "pagamentos" => $pagamentos,
+        ]);
+    }
+
+    /**
+     * Marca múltiplos pagamentos como `pago` em modo "histórico" — sem exigir
+     * num_referencia_externa, comprovativo ou multa. Apenas disponível para
+     * tenants com a flag `permite_pago_historico` activa (uso para reposição
+     * de dados antigos vindos de sistemas legados).
+     */
+    public function pagarMultiplosHistorico(Request $request) {
+        $escola = $request->attributes->get("escola");
+        if (!$escola || !$escola->permite_pago_historico) {
+            return response()->json([
+                "message" => "Esta escola não tem o modo histórico activo."
+            ], 403);
+        }
+
+        $request->validate([
+            "ids"            => "required|array|min:1",
+            "ids.*"          => "integer|exists:pagamentos,id",
+            "data_pagamento" => "required|date",
+            "metodo"         => "required|in:dinheiro,transferencia,multicaixa,referencia",
+            "observacao"     => "nullable|string|max:255",
+        ]);
+
+        $authUser = $request->attributes->get("auth_user");
+        $marcador = $authUser?->nome ?? "Sistema";
+        $obsExtra = "[HISTÓRICO por {$marcador}]" . ($request->observacao ? " — " . $request->observacao : "");
+
+        $loteId = "HIST-" . strtoupper(Str::random(10));
+        $afetados = 0;
+
+        $pendentes = Pagamento::whereIn("id", $request->ids)
+            ->whereIn("status", ["pendente", "vencido", "estornado"])
+            ->get();
+
+        foreach ($pendentes as $p) {
+            $obsFinal = trim(($p->observacao ? $p->observacao . " · " : "") . $obsExtra);
+            $p->update([
+                "status"         => "pago",
+                "metodo"         => $request->metodo,
+                "data_pagamento" => $request->data_pagamento,
+                "lote_id"        => $loteId,
+                "observacao"     => mb_substr($obsFinal, 0, 1000),
+                "multa_valor"    => 0,
+                "multa_id"       => null,
+            ]);
+            $afetados++;
+        }
+
+        return response()->json([
+            "message"     => "Marcados {$afetados} pagamento(s) como histórico.",
+            "afetados"    => $afetados,
+            "ignorados"   => count($request->ids) - $afetados,
+            "lote_id"     => $loteId,
         ]);
     }
 
@@ -562,10 +637,45 @@ class PagamentoController extends Controller {
         ]);
     }
 
+    public function emitirVendus(Request $request, Pagamento $pagamento) {
+        $escola = $request->attributes->get("escola");
+        if (!$escola) {
+            return response()->json(["ok" => false, "erro" => "Escola não detectada."], 422);
+        }
+        $pagamento->load("aluno.user","emolumento");
+        $r = (new VendusEmitter())->emitirPagamento($pagamento, $escola);
+        return response()->json([
+            "ok"        => $r["ok"],
+            "pagamento" => $r["pagamento"],
+            "erro"      => $r["erro"],
+        ], $r["ok"] ? 200 : 422);
+    }
+
+    public function emitirNotaCreditoVendus(Request $request, Pagamento $pagamento) {
+        $escola = $request->attributes->get("escola");
+        if (!$escola) {
+            return response()->json(["ok" => false, "erro" => "Escola não detectada."], 422);
+        }
+        $data = $request->validate([
+            "motivo" => ["required","string","min:5","max:500"],
+        ]);
+        $pagamento->load("aluno.user","emolumento");
+        $r = (new VendusEmitter())->emitirNotaCredito($pagamento, $escola, $data["motivo"]);
+        return response()->json([
+            "ok"        => $r["ok"],
+            "pagamento" => $r["pagamento"],
+            "erro"      => $r["erro"],
+        ], $r["ok"] ? 200 : 422);
+    }
+
     /** GET /pagamentos/carteira/{aluno} */
     public function carteira(Request $request, $alunoId) {
         $pagamentos = Pagamento::where('aluno_id', $alunoId)
-            ->with('aluno.user')
+            ->with(
+                'aluno.user',
+                'aluno.matriculas.turma.classe.curso',
+                'aluno.matriculas.turma.turnoObj'
+            )
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -646,7 +756,7 @@ class PagamentoController extends Controller {
     public function relatorioDiario(Request $request) {
         $data = $request->data ?? now()->toDateString();
 
-        $pagamentos = Pagamento::with('aluno.user', 'aluno.matriculas.turma')
+        $pagamentos = Pagamento::with('aluno.user', 'aluno.matriculas.turma.classe.curso', 'aluno.matriculas.turma.turnoObj')
             ->where('status', 'pago')
             ->whereDate('data_pagamento', $data)
             ->orderBy('data_pagamento', 'asc')

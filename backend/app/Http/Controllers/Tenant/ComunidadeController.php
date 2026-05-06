@@ -17,7 +17,7 @@ class ComunidadeController extends Controller {
      * pertence. Posts fixados aparecem no topo. Cursor: ?antes={id}.
      */
     public function feed(Request $r) {
-        $user      = $r->user();
+        $user      = $r->attributes->get("auth_user");
         $turmasIds = $this->turmasDoUser($user);
 
         $base = Post::query()
@@ -44,7 +44,7 @@ class ComunidadeController extends Controller {
 
     /** Fórum de uma turma — só tópicos do tipo "forum" dessa turma. */
     public function forumTurma(Request $r, int $turma) {
-        $user = $r->user();
+        $user = $r->attributes->get("auth_user");
         $this->garantirAcessoTurma($user, $turma);
 
         $base = Post::query()
@@ -66,7 +66,7 @@ class ComunidadeController extends Controller {
     /** Detalhe de um post + comentários ordenados por data. */
     public function show(Request $r, int $post) {
         $p = Post::with(["autor:id,nome,tipo,foto", "turma:id,nome"])->findOrFail($post);
-        $this->garantirVisibilidade($r->user(), $p);
+        $this->garantirVisibilidade($r->attributes->get("auth_user"), $p);
 
         $comentarios = Comentario::query()
             ->where("post_id", $p->id)
@@ -74,10 +74,10 @@ class ComunidadeController extends Controller {
             ->orderBy("created_at")
             ->get();
 
-        $jaGostei = Gosto::where("post_id", $p->id)->where("user_id", $r->user()->id)->exists();
+        $jaGostei = Gosto::where("post_id", $p->id)->where("user_id", $r->attributes->get("auth_user")->id)->exists();
 
         return response()->json([
-            "post"        => $this->formatarPost($p, $r->user()->id, $jaGostei),
+            "post"        => $this->formatarPost($p, $r->attributes->get("auth_user")->id, $jaGostei),
             "comentarios" => $comentarios->map(fn ($c) => [
                 "id"         => $c->id,
                 "corpo"      => $c->corpo,
@@ -95,7 +95,7 @@ class ComunidadeController extends Controller {
 
     /** Cria um post (feed) ou tópico de fórum. */
     public function criar(Request $r) {
-        $user = $r->user();
+        $user = $r->attributes->get("auth_user");
         $data = $r->validate([
             "tipo"      => "required|in:post,forum",
             "audiencia" => "required|in:escola,turma",
@@ -138,7 +138,7 @@ class ComunidadeController extends Controller {
 
     /** Actualiza corpo/título/fixado. Apenas autor (corpo/título) ou admin (tudo). */
     public function actualizar(Request $r, int $post) {
-        $user = $r->user();
+        $user = $r->attributes->get("auth_user");
         $p    = Post::findOrFail($post);
         $eAdmin = $user->tipo === "admin";
 
@@ -160,7 +160,7 @@ class ComunidadeController extends Controller {
 
     /** Remove (soft) um post. Autor ou admin. */
     public function apagar(Request $r, int $post) {
-        $user = $r->user();
+        $user = $r->attributes->get("auth_user");
         $p    = Post::findOrFail($post);
         if ($user->tipo !== "admin" && $p->autor_user_id !== $user->id) {
             return response()->json(["message" => "Sem permissão."], 403);
@@ -171,7 +171,7 @@ class ComunidadeController extends Controller {
 
     /** Adiciona comentário. */
     public function comentar(Request $r, int $post) {
-        $user = $r->user();
+        $user = $r->attributes->get("auth_user");
         $p    = Post::findOrFail($post);
         $this->garantirVisibilidade($user, $p);
 
@@ -204,7 +204,7 @@ class ComunidadeController extends Controller {
 
     /** Apaga comentário. Autor ou admin. */
     public function apagarComentario(Request $r, int $comentario) {
-        $user = $r->user();
+        $user = $r->attributes->get("auth_user");
         $c    = Comentario::findOrFail($comentario);
         if ($user->tipo !== "admin" && $c->autor_user_id !== $user->id) {
             return response()->json(["message" => "Sem permissão."], 403);
@@ -222,7 +222,7 @@ class ComunidadeController extends Controller {
 
     /** Toggle gosto (idempotente). Devolve novo total. */
     public function gostar(Request $r, int $post) {
-        $user = $r->user();
+        $user = $r->attributes->get("auth_user");
         $p    = Post::findOrFail($post);
         $this->garantirVisibilidade($user, $p);
 
@@ -243,7 +243,7 @@ class ComunidadeController extends Controller {
 
     /** Marca um comentário como resposta aceite (apenas autor do tópico ou admin, e só em fóruns). */
     public function aceitar(Request $r, int $post, int $comentario) {
-        $user = $r->user();
+        $user = $r->attributes->get("auth_user");
         $p    = Post::findOrFail($post);
         if ($p->tipo !== "forum") {
             return response()->json(["message" => "Apenas tópicos de fórum aceitam respostas."], 422);

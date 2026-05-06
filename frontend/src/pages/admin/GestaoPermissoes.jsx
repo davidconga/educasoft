@@ -6,56 +6,99 @@ const MODULOS = [
   {
     grupo: "Principal",
     itens: [
-      { key: "dashboard", label: "Dashboard" },
+      { key: "dashboard",  label: "Dashboard" },
+      { key: "chat",       label: "Chat" },
+      { key: "comunidade", label: "Comunidade Educajá" },
     ],
   },
   {
     grupo: "Académico",
     itens: [
-      { key: "alunos",        label: "Alunos" },
-      { key: "matriculas",    label: "Matrículas" },
-      { key: "professores",   label: "Professores" },
-      { key: "turmas",        label: "Turmas" },
-      { key: "notas",         label: "Notas" },
-      { key: "presencas",     label: "Presenças" },
-      { key: "horarios",      label: "Horários" },
-      { key: "aulas_remotas", label: "Aulas Remotas" },
+      { key: "alunos",         label: "Alunos" },
+      { key: "matriculas",     label: "Matrículas" },
+      { key: "professores",    label: "Professores" },
+      { key: "turmas",         label: "Turmas" },
+      { key: "notas",          label: "Notas" },
+      { key: "presencas",      label: "Presenças" },
+      { key: "horarios",       label: "Horários" },
+      { key: "aulas_remotas",  label: "Aulas Remotas" },
+      { key: "cartao_estudante", label: "Cartão de Estudante" },
+      { key: "folha_prova",    label: "Folha de Prova" },
     ],
   },
   {
     grupo: "Configurações",
     itens: [
-      { key: "gestao_escolar", label: "Classes & Salas" },
-      { key: "cursos",         label: "Cursos" },
-      { key: "disciplinas",    label: "Disciplinas" },
-      { key: "configuracoes",  label: "Dados da Escola" },
-      { key: "utilizadores",   label: "Utilizadores" },
-      { key: "permissoes",     label: "Permissões" },
+      { key: "gestao_escolar",          label: "Classes & Salas" },
+      { key: "cursos",                  label: "Cursos" },
+      { key: "disciplinas",             label: "Disciplinas" },
+      { key: "regras_aproveitamento",   label: "Regras Aproveitamento" },
+      { key: "tipos_documento",         label: "Tipos de Documento" },
+      { key: "configuracoes",           label: "Dados da Escola" },
+      { key: "configuracao_impressao",  label: "Formato de Impressão" },
+      { key: "integracao_vendus",       label: "Integração Vendus" },
+      { key: "utilizadores",            label: "Utilizadores" },
+      { key: "permissoes",              label: "Permissões" },
     ],
   },
   {
     grupo: "Financeiro",
     itens: [
-      { key: "pagamentos",        label: "Finanças" },
-      { key: "tesouraria",        label: "Tesouraria" },
-      { key: "controlo_propinas", label: "Controlo Propinas" },
-      { key: "precario",          label: "Preçário" },
-      { key: "bolsas",            label: "Bolsas & Financiadores" },
-      { key: "lembretes",         label: "Lembretes Propinas" },
+      { key: "pos",                  label: "POS — Cobrança" },
+      { key: "caixa",                label: "Gestão de Caixa" },
+      { key: "pagamentos",           label: "Finanças (pagamentos)" },
+      { key: "tesouraria",           label: "Tesouraria" },
+      { key: "controlo_propinas",    label: "Controlo Propinas" },
+      { key: "controlo_emolumentos", label: "Controlo Emolumentos" },
+      { key: "carteira_aluno",       label: "Carteira do Aluno" },
+      { key: "relatorio_diario",     label: "Relatório Diário" },
+      { key: "relatorio_financeiro", label: "Relatório Financeiro" },
+      { key: "precario",             label: "Preçário" },
+      { key: "bolsas",               label: "Bolsas & Financiadores" },
+      { key: "lembretes",            label: "Lembretes Propinas" },
     ],
   },
 ];
 
+// Permissões por defeito de cada perfil. `null` = todas (apenas admin).
 const DEFAULTS = {
-  admin:     null,
-  secretaria: ["dashboard","alunos","matriculas","professores","turmas","notas","presencas","horarios","pagamentos","tesouraria","controlo_propinas"],
-  director:   ["dashboard","alunos","notas","pagamentos","tesouraria","controlo_propinas"],
+  admin: null,
+
+  director: [
+    "dashboard","chat","comunidade",
+    "alunos","matriculas","professores","turmas","notas","presencas","horarios","cartao_estudante","folha_prova",
+    "pos","caixa","pagamentos","tesouraria","controlo_propinas","controlo_emolumentos","carteira_aluno",
+    "relatorio_diario","relatorio_financeiro","precario","bolsas","lembretes",
+    "configuracoes","integracao_vendus","configuracao_impressao",
+  ],
+
+  secretaria: [
+    "dashboard","chat",
+    "alunos","matriculas","professores","turmas","notas","presencas","horarios","cartao_estudante",
+    "pos","caixa","pagamentos","controlo_propinas","controlo_emolumentos","carteira_aluno",
+    "lembretes","precario","bolsas",
+  ],
+
+  tesouraria: [
+    "dashboard","alunos",
+    "pos","caixa","pagamentos","tesouraria","controlo_propinas","controlo_emolumentos","carteira_aluno",
+    "relatorio_diario","relatorio_financeiro","precario","bolsas","lembretes",
+    "configuracao_impressao","integracao_vendus",
+  ],
+
+  coordenador: [
+    "dashboard","chat",
+    "alunos","matriculas","turmas","notas","presencas","horarios",
+    "controlo_propinas",
+  ],
 };
 
 const TIPO_BADGE = {
-  admin:     "bg-violet-100 text-violet-700",
-  secretaria:"bg-blue-100 text-blue-700",
-  director:  "bg-emerald-100 text-emerald-700",
+  admin:      "bg-violet-100 text-violet-700",
+  secretaria: "bg-blue-100 text-blue-700",
+  director:   "bg-emerald-100 text-emerald-700",
+  tesouraria: "bg-amber-100 text-amber-700",
+  coordenador:"bg-pink-100 text-pink-700",
 };
 
 export default function GestaoPermissoes() {

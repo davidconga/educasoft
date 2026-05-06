@@ -6,6 +6,7 @@ import {
   Camera, Upload, X, ImageIcon, RefreshCw,
 } from "lucide-react";
 import api from "../../services/api";
+import { useAuthStore } from "../../store/auth";
 
 function InfoRow({ icon: Icon, label, value }) {
   if (!value) return null;
@@ -317,6 +318,55 @@ const TABS = [
   { key:"acesso",      label:"Acesso",      icon:"🔑" },
 ];
 
+/* ── Card: Reset verificação académica (Golfinho — uso de teste) ── */
+function ResetVerificacaoAcademicaCard({ aluno, onReset }) {
+  const { escola } = useAuthStore();
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  if (!escola?.permite_pago_historico) return null;
+
+  const handleReset = async () => {
+    if (!window.confirm("Limpar a verificação académica deste aluno? O modal de verificação vai abrir de novo na próxima selecção.")) return;
+    setLoading(true); setMsg(null);
+    try {
+      const r = await api.patch(`/alunos/${aluno.id}/reset-verificacao-academica`);
+      onReset?.(r.data.aluno);
+      setMsg({ type: "success", text: r.data.message });
+    } catch (e) {
+      setMsg({ type: "error", text: e.response?.data?.message || "Erro." });
+    } finally { setLoading(false); }
+  };
+
+  const verificadoEm = aluno.dados_academicos_verificados_em
+    ? new Date(aluno.dados_academicos_verificados_em).toLocaleString("pt-AO")
+    : null;
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-3">
+      <div className="flex items-center gap-2 mb-1">
+        <div className="w-2 h-2 rounded-full bg-amber-500" />
+        <h2 className="text-sm font-semibold text-slate-700">Verificação académica</h2>
+      </div>
+      <p className="text-xs text-slate-500">
+        Estado: {verificadoEm
+          ? <>verificado a <strong>{verificadoEm}</strong></>
+          : <em className="text-slate-400">por verificar (modal vai abrir na próxima selecção)</em>}
+      </p>
+      {msg && (
+        <div className={`text-xs px-3 py-2 rounded-lg border
+          ${msg.type === "success" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-red-50 text-red-700 border-red-200"}`}>
+          {msg.text}
+        </div>
+      )}
+      <button onClick={handleReset} disabled={loading || !verificadoEm}
+        className="w-full text-xs font-medium px-3 py-2 rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-50 disabled:opacity-40">
+        {loading ? "A resetar..." : "🔄 Resetar verificação académica"}
+      </button>
+    </div>
+  );
+}
+
 export default function AlunoDetalhe() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -575,8 +625,9 @@ export default function AlunoDetalhe() {
           )}
 
           {tab === "acesso" && (
-            <div className="max-w-sm">
+            <div className="max-w-sm space-y-4">
               <SenhaCard alunoId={aluno.id} />
+              <ResetVerificacaoAcademicaCard aluno={aluno} onReset={(a) => setAluno(a)} />
             </div>
           )}
 

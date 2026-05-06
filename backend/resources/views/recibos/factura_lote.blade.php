@@ -186,10 +186,21 @@
 @endif
 @endif
 
-<table class="assinaturas">
+@php
+  $codigoEsc = $escola['codigo'] ?? 'esc';
+  $refRec    = $primeiro->referencia ?: ('PAG-' . $primeiro->id);
+  $hash      = $primeiro->hash_factura ? '?h=' . $primeiro->hash_factura : '';
+  $qrData    = url('/verificar-recibo/' . $codigoEsc . '/' . rawurlencode($refRec)) . $hash . '&lote=' . urlencode($lote_id);
+  $qrUrl     = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&qzone=2&data=' . urlencode($qrData);
+@endphp
+<table class="assinaturas" style="width:100%;">
   <tr>
-    <td><div class="ass-linha"></div><div class="ass-label">Tesoureiro(a)</div></td>
-    <td><div class="ass-linha"></div><div class="ass-label">Encarregado de Educação / Aluno</div></td>
+    <td style="width:38%; vertical-align:bottom;"><div class="ass-linha"></div><div class="ass-label">Tesoureiro(a)</div></td>
+    <td style="width:38%; vertical-align:bottom;"><div class="ass-linha"></div><div class="ass-label">Encarregado de Educação / Aluno</div></td>
+    <td style="width:24%; text-align:center; vertical-align:bottom;">
+      <img src="{{ $qrUrl }}" alt="QR" style="width:80px;height:80px;border:1px solid #e5e7eb;padding:3px;border-radius:4px;background:#fff;"/>
+      <div style="font-size:8px;color:#94a3b8;margin-top:2px;">Lote {{ $lote_id }}</div>
+    </td>
   </tr>
 </table>
 

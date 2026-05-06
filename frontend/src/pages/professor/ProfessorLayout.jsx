@@ -3,6 +3,7 @@ import { NavLink, useNavigate, Outlet } from "react-router-dom";
 import { LayoutDashboard, Users, BookOpen, Clock, Video, KeyRound, LogOut, Menu, GraduationCap, CalendarCheck, MessageSquare, Sparkles } from "lucide-react";
 import { useAuthStore } from "../../store/auth";
 import { useBranding } from "../../hooks/useBranding";
+import { useSondagemChat } from "../../hooks/useSondagemChat";
 
 const nav = [
   { to: "/professor",          label: "Início",         icon: LayoutDashboard, end: true },
@@ -11,7 +12,7 @@ const nav = [
   { to: "/professor/presencas",  label: "Presenças",  icon: CalendarCheck },
   { to: "/professor/horario",    label: "Horário",    icon: Clock },
   { to: "/professor/aulas",    label: "Aulas Online",   icon: Video },
-  { to: "/professor/chat",        label: "Chat",          icon: MessageSquare },
+  { to: "/professor/chat",        label: "Chat",          icon: MessageSquare, badge: "chat" },
   { to: "/professor/comunidade",  label: "Educaja",       icon: Sparkles },
   { to: "/professor/conta",       label: "Minha Conta",   icon: KeyRound },
 ];
@@ -21,6 +22,7 @@ export default function ProfessorLayout() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const branding = useBranding();
+  const { naoLidasTotal: chatNaoLidas } = useSondagemChat({ activo: true });
 
   const handleLogout = () => { logout(); navigate("/login"); };
   const fotoUrl = user?.foto ? `/storage/${user.foto}` : null;
@@ -57,17 +59,25 @@ export default function ProfessorLayout() {
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-0.5">
-          {nav.map(item => (
-            <NavLink key={item.to} to={item.to} end={item.end}
-              onClick={() => setOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors
-                ${isActive ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-800"}`
-              }>
-              <item.icon size={17} />
-              {item.label}
-            </NavLink>
-          ))}
+          {nav.map(item => {
+            const badgeValue = item.badge === "chat" ? chatNaoLidas : 0;
+            return (
+              <NavLink key={item.to} to={item.to} end={item.end}
+                onClick={() => setOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors
+                  ${isActive ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-800"}`
+                }>
+                <item.icon size={17} />
+                <span className="flex-1">{item.label}</span>
+                {badgeValue > 0 && (
+                  <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+                    {badgeValue > 99 ? "99+" : badgeValue}
+                  </span>
+                )}
+              </NavLink>
+            );
+          })}
         </nav>
 
         <div className="p-4 border-t border-slate-100">

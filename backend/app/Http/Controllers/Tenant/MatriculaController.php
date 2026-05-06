@@ -10,6 +10,7 @@ use App\Models\Tenant\Matricula;
 use App\Models\Tenant\TipoDocumento;
 use App\Models\Tenant\Turma;
 use App\Models\Tenant\User;
+use App\Services\Central\LimitesPlanoService;
 use App\Services\Tenant\AproveitamentoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -51,6 +52,20 @@ class MatriculaController extends Controller {
                 "email" => "required|email|unique:users,email",
                 "data_nascimento" => "nullable|date",
             ]);
+
+            // Verificar limite de alunos do plano
+            $escola = $request->attributes->get("escola");
+            if ($escola) {
+                $limite = (new LimitesPlanoService())->alunos($escola);
+                if (!$limite["pode"]) {
+                    return response()->json([
+                        "message"     => $limite["mensagem"],
+                        "code"        => "limite_alunos_atingido",
+                        "limite"      => $limite,
+                        "upgrade_url" => "/upgrade?feature=mais_alunos",
+                    ], 422);
+                }
+            }
         }
 
         // Validação de capacidade da turma (sala manda; senão capacidade da turma)

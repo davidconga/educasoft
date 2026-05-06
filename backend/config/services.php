@@ -35,4 +35,14 @@ return [
         ],
     ],
 
+    'vendus' => [
+        'base_url' => env('VENDUS_BASE_URL', 'https://www.vendus.co.ao/ws/v1.1/'),
+        'api_key' => env('VENDUS_API_KEY'),
+        'register_id' => env('VENDUS_REGISTER_ID'),
+        'serie' => env('VENDUS_SERIE'),
+        'modo' => env('VENDUS_MODO', 'live'),
+        'timeout' => (int) env('VENDUS_TIMEOUT', 20),
+        'verify_ssl' => (bool) env('VENDUS_VERIFY_SSL', true),
+    ],
+
 ];

@@ -1,6 +1,8 @@
 <?php
 namespace App\Http\Controllers\Tenant;
 use App\Http\Controllers\Controller;
+use App\Services\Central\LimitesPlanoService;
+use App\Services\Central\PlanoTenantResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -37,12 +39,16 @@ class AuthController extends Controller {
         return response()->json([
             "token" => $token,
             "user" => ["id"=>$user->id,"nome"=>$user->nome,"email"=>$user->email,"tipo"=>$user->tipo,"foto"=>$user->foto,"ativo"=>$user->ativo,"permissoes"=>$user->permissoes],
-            "escola" => $escola ? ["id"=>$escola->id,"codigo"=>$escola->codigo,"nome"=>$escola->nome,"logo"=>$escola->logo,"email"=>$escola->email,"telefone"=>$escola->telefone,"endereco"=>$escola->endereco] : null,
+            "escola" => $escola ? ["id"=>$escola->id,"codigo"=>$escola->codigo,"nome"=>$escola->nome,"logo"=>$escola->logo,"email"=>$escola->email,"telefone"=>$escola->telefone,"endereco"=>$escola->endereco,"formato_impressao"=>$escola->formato_impressao ?: "a4","permite_pago_historico"=>(bool)$escola->permite_pago_historico] : null,
+            "plano"   => $escola ? (new PlanoTenantResolver())->paraEscola($escola) : null,
+            "limites" => $escola ? [
+                "alunos"  => (new LimitesPlanoService())->alunos($escola),
+                "admins"  => (new LimitesPlanoService())->admins($escola),
+            ] : null,
         ]);
     }
 
     public function logout(Request $request) {
-        $user = $request->attributes->get("auth_user");
         $tokenId = $request->attributes->get("auth_token_id");
         if ($tokenId) {
             DB::connection("tenant")->table("personal_access_tokens")->where("id", $tokenId)->delete();
@@ -55,7 +61,8 @@ class AuthController extends Controller {
         $escola = $request->attributes->get("escola");
         return response()->json([
             "user" => $user,
-            "escola" => $escola ? ["id"=>$escola->id,"codigo"=>$escola->codigo,"nome"=>$escola->nome,"logo"=>$escola->logo,"email"=>$escola->email,"telefone"=>$escola->telefone,"endereco"=>$escola->endereco] : null,
+            "escola" => $escola ? ["id"=>$escola->id,"codigo"=>$escola->codigo,"nome"=>$escola->nome,"logo"=>$escola->logo,"email"=>$escola->email,"telefone"=>$escola->telefone,"endereco"=>$escola->endereco,"formato_impressao"=>$escola->formato_impressao ?: "a4","permite_pago_historico"=>(bool)$escola->permite_pago_historico] : null,
+            "plano" => $escola ? (new PlanoTenantResolver())->paraEscola($escola) : null,
         ]);
     }
 }

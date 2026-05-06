@@ -17,7 +17,7 @@ class ChatController extends Controller {
      * mensagem, contador de não-lidas e nome legível para o cabeçalho.
      */
     public function conversas(Request $r) {
-        $userId = $r->user()->id;
+        $userId = $r->attributes->get("auth_user")->id;
         $convs = Conversa::query()
             ->whereHas("participantes", fn($q) => $q->where("user_id", $userId))
             ->with([
@@ -57,12 +57,12 @@ class ChatController extends Controller {
 
     /** Detalhe de uma conversa (cabeçalho). */
     public function showConversa(Request $r, int $conversa) {
-        $c = $this->conversaOuFalha($conversa, $r->user()->id);
+        $c = $this->conversaOuFalha($conversa, $r->attributes->get("auth_user")->id);
         $c->load(["turma:id,nome", "utilizadores:id,nome,tipo,foto"]);
         return response()->json([
             "id"            => $c->id,
             "tipo"          => $c->tipo,
-            "titulo"        => $this->tituloDaConversa($c, $r->user()->id),
+            "titulo"        => $this->tituloDaConversa($c, $r->attributes->get("auth_user")->id),
             "turma"         => $c->turma ? ["id" => $c->turma->id, "nome" => $c->turma->nome] : null,
             "participantes" => $c->utilizadores->map(fn($u) => [
                 "id" => $u->id, "nome" => $u->nome, "tipo" => $u->tipo, "foto" => $u->foto,
@@ -76,9 +76,9 @@ class ChatController extends Controller {
      */
     public function iniciarPrivada(Request $r) {
         $data = $r->validate([
-            "user_id" => "required|integer|exists:users,id|different:" . $r->user()->id,
+            "user_id" => "required|integer|exists:users,id|different:" . $r->attributes->get("auth_user")->id,
         ]);
-        $me    = $r->user()->id;
+        $me    = $r->attributes->get("auth_user")->id;
         $other = (int) $data["user_id"];
         if ($me === $other) {
             return response()->json(["message" => "Não pode iniciar conversa consigo próprio."], 422);
@@ -134,12 +134,12 @@ class ChatController extends Controller {
                 if ($uid) $userIds->push($uid);
             }
         }
-        $userIds->push($r->user()->id);
+        $userIds->push($r->attributes->get("auth_user")->id);
         $userIds = $userIds->filter()->unique()->values();
 
         $conv = Conversa::firstOrCreate(
             ["tipo" => "turma", "turma_id" => $turmaModel->id],
-            ["titulo" => "Turma " . $turmaModel->nome, "criada_por_user_id" => $r->user()->id]
+            ["titulo" => "Turma " . $turmaModel->nome, "criada_por_user_id" => $r->attributes->get("auth_user")->id]
         );
 
         $existentes = ConversaParticipante::where("conversa_id", $conv->id)->pluck("user_id")->all();
@@ -152,7 +152,7 @@ class ChatController extends Controller {
             );
         }
 
-        if (! $conv->temParticipante($r->user()->id)) {
+        if (! $conv->temParticipante($r->attributes->get("auth_user")->id)) {
             return response()->json(["message" => "Sem permissão para esta turma."], 403);
         }
 
@@ -164,7 +164,7 @@ class ChatController extends Controller {
      * Sem cursor → últimas 50.
      */
     public function mensagens(Request $r, int $conversa) {
-        $this->conversaOuFalha($conversa, $r->user()->id);
+        $this->conversaOuFalha($conversa, $r->attributes->get("auth_user")->id);
         $q = Mensagem::query()
             ->where("conversa_id", $conversa)
             ->with("autor:id,nome,tipo,foto")
@@ -179,20 +179,20 @@ class ChatController extends Controller {
 
     /** Envia mensagem. */
     public function enviar(Request $r, int $conversa) {
-        $c    = $this->conversaOuFalha($conversa, $r->user()->id);
+        $c    = $this->conversaOuFalha($conversa, $r->attributes->get("auth_user")->id);
         $data = $r->validate([
             "corpo" => "required|string|max:5000",
         ]);
         $msg = Mensagem::create([
             "conversa_id" => $c->id,
-            "user_id"     => $r->user()->id,
+            "user_id"     => $r->attributes->get("auth_user")->id,
             "corpo"       => trim($data["corpo"]),
         ]);
         $c->update(["ultima_mensagem_em" => $msg->created_at]);
 
         // Quem envia, marca como lida automaticamente.
         ConversaParticipante::where("conversa_id", $c->id)
-            ->where("user_id", $r->user()->id)
+            ->where("user_id", $r->attributes->get("auth_user")->id)
             ->update(["last_read_at" => $msg->created_at]);
 
         $msg->load("autor:id,nome,tipo,foto");
@@ -201,9 +201,9 @@ class ChatController extends Controller {
 
     /** Marca conversa como lida (actualiza last_read_at para now). */
     public function marcarLida(Request $r, int $conversa) {
-        $this->conversaOuFalha($conversa, $r->user()->id);
+        $this->conversaOuFalha($conversa, $r->attributes->get("auth_user")->id);
         ConversaParticipante::where("conversa_id", $conversa)
-            ->where("user_id", $r->user()->id)
+            ->where("user_id", $r->attributes->get("auth_user")->id)
             ->update(["last_read_at" => now()]);
         return response()->json(["ok" => true]);
     }
@@ -213,7 +213,7 @@ class ChatController extends Controller {
      * de conversas que tiveram actividade desde o timestamp recebido.
      */
     public function sondagem(Request $r) {
-        $userId = $r->user()->id;
+        $userId = $r->attributes->get("auth_user")->id;
         $desde  = $r->filled("desde") ? Carbon::parse($r->desde) : null;
 
         $convsId = ConversaParticipante::where("user_id", $userId)->pluck("conversa_id");
@@ -246,8 +246,8 @@ class ChatController extends Controller {
      * veem professores+admins, professores veem alunos+admins).
      */
     public function contactos(Request $r) {
-        $me    = $r->user();
-        $busca = trim((string) $r->get("busca", ""));
+        $me    = $r->attributes->get("auth_user");
+        $busca = trim((string) $r->query("busca", ""));
         $q = User::query()
             ->where("id", "!=", $me->id)
             ->where("ativo", true);

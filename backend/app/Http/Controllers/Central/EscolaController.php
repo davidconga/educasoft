@@ -1,9 +1,15 @@
 <?php
 namespace App\Http\Controllers\Central;
 use App\Http\Controllers\Controller;
+use App\Models\Central\Contacto;
 use App\Models\Central\Escola;
+use App\Models\Central\FacturaCentral;
+use App\Models\Central\SiteChat;
+use App\Models\Central\SuperAdminImpersonation;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 class EscolaController extends Controller {
@@ -146,7 +152,7 @@ class EscolaController extends Controller {
     }
 
     public function update(Request $request, Escola $escola) {
-        $escola->update($request->only(["nome","email","telefone","endereco","plano","ativo"]));
+        $escola->update($request->only(["nome","email","telefone","endereco","plano","ativo","permite_pago_historico"]));
         return response()->json(["message" => "Escola actualizada.", "escola" => $escola]);
     }
 
@@ -155,11 +161,128 @@ class EscolaController extends Controller {
         return response()->json(["message" => "Escola removida."]);
     }
 
+    /**
+     * Super-admin entra no tenant como o user admin (impersonação).
+     * Exige password do super-admin como confirmação. Token expira em 4h.
+     * Cada uso fica registado em super_admin_impersonations para auditoria.
+     */
+    public function impersonate(Request $request, Escola $escola) {
+        $request->validate([
+            'password' => 'required|string',
+            'motivo'   => 'nullable|string|max:255',
+        ]);
+
+        $superAdmin = $request->user();
+        if (!$superAdmin || !Hash::check($request->password, $superAdmin->password)) {
+            return response()->json(['message' => 'Password do super-admin inválida.'], 403);
+        }
+
+        if (!$escola->ativo) {
+            return response()->json(['message' => 'Escola desactivada — activa primeiro.'], 422);
+        }
+
+        try {
+            tenancy()->initialize($escola);
+
+            $admin = \App\Models\Tenant\User::where('tipo', 'admin')->where('ativo', true)->first();
+            if (!$admin) {
+                tenancy()->end();
+                return response()->json(['message' => 'Tenant não tem nenhum admin activo.'], 404);
+            }
+
+            $expiresAt = now()->addHours(4);
+            $token = $admin->createToken(
+                "impersonation:{$superAdmin->id}",
+                ['*'],
+                $expiresAt
+            )->plainTextToken;
+
+            $payload = [
+                'token'      => $token,
+                'expires_at' => $expiresAt->toIso8601String(),
+                'tenant_id'  => $escola->id,
+                'codigo'     => $escola->codigo,
+                'admin_user' => [
+                    'id'    => $admin->id,
+                    'nome'  => $admin->nome,
+                    'email' => $admin->email,
+                ],
+                'sso_url'    => "https://{$escola->codigo}.educa.okulandisa.com/auth/sso?"
+                    . http_build_query([
+                        't'   => $token,
+                        'tc'  => $escola->codigo,
+                        'exp' => $expiresAt->timestamp,
+                        'src' => 'super-admin',
+                    ]),
+            ];
+
+            tenancy()->end();
+
+            SuperAdminImpersonation::create([
+                'super_admin_id'    => $superAdmin->id,
+                'super_admin_email' => $superAdmin->email,
+                'tenant_id'         => $escola->id,
+                'tenant_codigo'     => $escola->codigo,
+                'tenant_user_id'    => $admin->id,
+                'tenant_user_email' => $admin->email,
+                'tenant_user_nome'  => $admin->nome,
+                'motivo'            => $request->motivo,
+                'ip'                => $request->ip(),
+                'user_agent'        => substr((string) $request->userAgent(), 0, 500),
+                'expires_at'        => $expiresAt,
+            ]);
+
+            return response()->json($payload);
+        } catch (\Throwable $e) {
+            try { tenancy()->end(); } catch (\Throwable $_) {}
+            return response()->json(['message' => 'Falha: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /** Lista do histórico de impersonações (auditoria). */
+    public function impersonationsHistory(Request $request, Escola $escola) {
+        return response()->json(
+            SuperAdminImpersonation::where('tenant_id', $escola->id)
+                ->orderByDesc('created_at')
+                ->paginate(50)
+        );
+    }
+
     public function dashboard() {
+        $hoje7  = Carbon::now()->subDays(7);
+        $hoje30 = Carbon::now()->subDays(30);
+
+        $porPlano = Escola::selectRaw("plano, COUNT(*) as total")->groupBy("plano")->pluck("total", "plano");
+        $serieAdesoes = Escola::selectRaw("DATE(created_at) as dia, COUNT(*) as total")
+            ->where("created_at", ">=", $hoje30)
+            ->groupBy("dia")->orderBy("dia")
+            ->get();
+
         return response()->json([
-            "total_escolas"   => Escola::count(),
-            "escolas_ativas"  => Escola::where("ativo", true)->count(),
-            "escolas"         => Escola::latest()->take(10)->get(),
+            "total_escolas"     => Escola::count(),
+            "escolas_ativas"    => Escola::where("ativo", true)->count(),
+            "escolas_pendentes" => Escola::where("ativo", false)->count(),
+            "adesoes_7d"        => Escola::where("created_at", ">=", $hoje7)->count(),
+            "adesoes_30d"       => Escola::where("created_at", ">=", $hoje30)->count(),
+            "por_plano"         => $porPlano,
+            "serie_adesoes"     => $serieAdesoes,
+
+            "chats_abertos"     => SiteChat::where("estado", "!=", "fechado")->count(),
+            "chats_nao_lidos"   => (int) SiteChat::sum("nao_lidas_admin"),
+
+            "contactos_novos"   => Contacto::where("estado", "novo")->count(),
+            "contactos_total"   => Contacto::count(),
+
+            "facturas_pendentes" => FacturaCentral::where("estado", "pendente")->count(),
+            "valor_pendente"     => (float) FacturaCentral::where("estado", "pendente")->sum("total"),
+            "valor_pago_mes"     => (float) FacturaCentral::where("estado", "paga")
+                                        ->whereMonth("paga_em", Carbon::now()->month)
+                                        ->whereYear("paga_em", Carbon::now()->year)
+                                        ->sum("total"),
+            "facturas_vencidas"  => FacturaCentral::where("estado", "pendente")
+                                        ->whereDate("data_vencimento", "<", Carbon::today())->count(),
+
+            "escolas"           => Escola::latest()->take(10)->get(),
         ]);
     }
 }

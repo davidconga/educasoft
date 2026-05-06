@@ -5,7 +5,7 @@ use App\Models\Tenant\Turma;
 use Illuminate\Http\Request;
 class TurmaController extends Controller {
     public function index(Request $request) {
-        $query = Turma::with("classe.curso","sala")
+        $query = Turma::with("classe.curso","sala","turnoObj")
             ->withCount(["matriculas as ocupacao" => fn($q) => $q->whereIn("status", ["pendente","activa"])]);
         if ($request->ano_letivo) $query->where("ano_letivo", $request->ano_letivo);
         if ($request->classe_id)  $query->where("classe_id",  $request->classe_id);

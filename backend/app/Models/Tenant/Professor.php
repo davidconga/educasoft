@@ -8,4 +8,5 @@ class Professor extends Model {
     public function horarios() { return $this->hasMany(Horario::class); }
     public function turmas() { return $this->belongsToMany(Turma::class,"turma_disciplina")->distinct(); }
     public function disciplinas() { return $this->belongsToMany(Disciplina::class,"turma_disciplina"); }
+    public function funcionario() { return $this->hasOne(Funcionario::class); }
 }

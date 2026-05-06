@@ -14,10 +14,39 @@ class Escola extends BaseTenant implements TenantWithDatabase
 
     public static function getCustomColumns(): array
     {
-        return ["id","nome","email","telefone","endereco","logo","ativo","plano","codigo"];
+        return [
+            "id","nome","email","telefone","endereco","logo","ativo","plano","codigo","nif",
+            "email_facturacao","responsavel_facturacao","dia_vencimento","valor_mensal","desconto_pct","notas_facturacao",
+            "termos_versao_aceita","termos_aceitos_em","termos_aceitos_ip",
+            "vendus_ativo","vendus_api_key","vendus_register_id","vendus_serie","vendus_modo",
+            "formato_impressao",
+            "permite_pago_historico",
+        ];
     }
 
-    protected $casts = ["ativo" => "boolean"];
+    protected $casts = [
+        "ativo" => "boolean",
+        "valor_mensal" => "decimal:2",
+        "desconto_pct" => "decimal:2",
+        "dia_vencimento" => "integer",
+        "vendus_ativo" => "boolean",
+        "vendus_api_key" => "encrypted",
+        "permite_pago_historico" => "boolean",
+    ];
+
+    public function facturas() {
+        return $this->hasMany(FacturaCentral::class, "escola_id");
+    }
+
+    public function assinaturas() {
+        return $this->hasMany(Assinatura::class, "escola_id");
+    }
+
+    public function assinaturaAtiva() {
+        return $this->hasOne(Assinatura::class, "escola_id")
+            ->whereIn("estado", ["ativa", "trial"])
+            ->latestOfMany();
+    }
 
     public function getDatabaseConfig(): array
     {

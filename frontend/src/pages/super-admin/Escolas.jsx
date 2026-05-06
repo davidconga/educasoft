@@ -61,6 +61,9 @@ export default function SuperAdminEscolas() {
   const [detailEscola, setDetailEscola] = useState(null);
   const [activateModal, setActivateModal] = useState(null); // escola sem admin guardado
   const [activateForm, setActivateForm] = useState({ admin_nome:"", admin_email:"", admin_password:"" });
+  const [impersonateEscola, setImpersonateEscola] = useState(null);
+  const [impersonateForm, setImpersonateForm] = useState({ password:"", motivo:"" });
+  const [impersonateLoading, setImpersonateLoading] = useState(false);
 
   // Forms
   const [form, setForm]       = useState(emptyForm);
@@ -133,6 +136,23 @@ export default function SuperAdminEscolas() {
     finally { setActionLoading(null); }
   };
 
+  const handleImpersonate = async (e) => {
+    e.preventDefault();
+    if (!impersonateEscola) return;
+    setImpersonateLoading(true);
+    try {
+      const { data } = await api.post(`/escolas/${impersonateEscola.id}/impersonate`, impersonateForm);
+      window.open(data.sso_url, "_blank", "noopener");
+      showToast(`Sessão iniciada como ${data.admin_user.nome} — expira em 4h.`);
+      setImpersonateEscola(null);
+      setImpersonateForm({ password: "", motivo: "" });
+    } catch (err) {
+      showToast(err.response?.data?.message || "Falha ao gerar sessão.", "error");
+    } finally {
+      setImpersonateLoading(false);
+    }
+  };
+
   const destroy = async (escola) => {
     if (!confirm(`Eliminar "${escola.nome}" permanentemente?`)) return;
     setActionLoading(escola.id + "_del");
@@ -164,7 +184,7 @@ export default function SuperAdminEscolas() {
   // ── Edit ─────────────────────────────────────────────────────
   const openEdit = (escola) => {
     setEditEscola(escola);
-    setEditForm({ nome: escola.nome, email: escola.email, telefone: escola.telefone ?? "", endereco: escola.endereco ?? "", plano: escola.plano });
+    setEditForm({ nome: escola.nome, email: escola.email, telefone: escola.telefone ?? "", endereco: escola.endereco ?? "", plano: escola.plano, permite_pago_historico: !!escola.permite_pago_historico });
     setFormErrors({});
   };
 
@@ -304,6 +324,14 @@ export default function SuperAdminEscolas() {
                             {busy("_deact") ? "..." : "Suspender"}
                           </button>
                         )}
+                        {/* Entrar como admin (impersonação) */}
+                        {escola.ativo && (
+                          <button onClick={() => setImpersonateEscola(escola)}
+                            className="bg-indigo-600 text-white text-xs font-semibold px-2.5 py-1 rounded-lg hover:bg-indigo-500 whitespace-nowrap"
+                            title="Entrar como admin do tenant">
+                            🔑 Entrar
+                          </button>
+                        )}
                         {/* Delete */}
                         <button onClick={() => destroy(escola)} disabled={busy("_del")}
                           className="text-red-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors" title="Eliminar">
@@ -343,7 +371,7 @@ export default function SuperAdminEscolas() {
               <div className="col-span-2">
                 <Field label="Endereço" error={formErrors.endereco?.[0]}>
                   <input value={form.endereco} onChange={e => setForm(f => ({...f, endereco: e.target.value}))}
-                    className={inp("border-gray-300")} placeholder="Rua Principal, Luanda" />
+                    className={inp("border-gray-300")} placeholder="Rua Principal, Benguela" />
                 </Field>
               </div>
               <Field label="Código *" error={formErrors.codigo?.[0]}>
@@ -416,6 +444,25 @@ export default function SuperAdminEscolas() {
                 </select>
               </Field>
             </div>
+
+            <div className="border-t pt-4 mt-2">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!editForm.permite_pago_historico}
+                  onChange={e => setEditForm(f => ({...f, permite_pago_historico: e.target.checked}))}
+                  className="mt-1 rounded border-gray-300"
+                />
+                <div>
+                  <div className="text-sm font-medium text-gray-800">📜 Modo histórico de pagamentos</div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    Permite ao admin marcar pagamentos como "pagos" sem comprovativo nem multa.
+                    Usar apenas para reposição de dados antigos vindos de sistemas legados.
+                  </div>
+                </div>
+              </label>
+            </div>
+
             <div className="flex gap-3 pt-1">
               <button type="button" onClick={() => setEditEscola(null)} className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50">Cancelar</button>
               <button type="submit" disabled={saving} className="flex-1 bg-blue-700 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-blue-600 disabled:opacity-60">
@@ -512,6 +559,43 @@ export default function SuperAdminEscolas() {
               <button type="button" onClick={() => setActivateModal(null)} className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50">Cancelar</button>
               <button type="submit" disabled={actionLoading === activateModal.id + "_act"} className="flex-1 bg-green-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-green-500 disabled:opacity-60">
                 {actionLoading === activateModal.id + "_act" ? "A activar..." : "✅ Activar Escola"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* ── Modal: Entrar como admin (impersonação) ── */}
+      {impersonateEscola && (
+        <Modal title={`Entrar como admin — ${impersonateEscola.nome}`} onClose={() => setImpersonateEscola(null)}>
+          <form onSubmit={handleImpersonate} className="space-y-4">
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-xs text-amber-800">
+              ⚠️ Vais entrar no tenant <strong>{impersonateEscola.codigo}</strong> como o admin.
+              Cada acção fica registada (auditoria). Sessão expira em 4 horas.
+            </div>
+
+            <Field label="A tua password de super-admin">
+              <input type="password" required autoFocus
+                value={impersonateForm.password}
+                onChange={e => setImpersonateForm(f => ({ ...f, password: e.target.value }))}
+                className={inp()} placeholder="••••••••" />
+            </Field>
+
+            <Field label="Motivo (opcional, fica registado)">
+              <input type="text" maxLength={255}
+                value={impersonateForm.motivo}
+                onChange={e => setImpersonateForm(f => ({ ...f, motivo: e.target.value }))}
+                className={inp()} placeholder="Ex: reposição de pagamentos antigos" />
+            </Field>
+
+            <div className="flex gap-2 pt-2">
+              <button type="button" onClick={() => setImpersonateEscola(null)}
+                className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50">
+                Cancelar
+              </button>
+              <button type="submit" disabled={impersonateLoading || !impersonateForm.password}
+                className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-500 disabled:opacity-60">
+                {impersonateLoading ? "A gerar sessão..." : "🔑 Entrar como admin"}
               </button>
             </div>
           </form>

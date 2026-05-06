@@ -62,7 +62,7 @@ export default function Login() {
         return;
       }
 
-      setAuth(data.token, data.user, data.escola, form.escola_codigo);
+      setAuth(data.token, data.user, data.escola, form.escola_codigo, data.plano ?? null, data.limites ?? null);
       navigate(tipoConfig.redirect);
     } catch (err) {
       setError(err.response?.data?.message || "Credenciais inválidas. Verifique o código da escola.");

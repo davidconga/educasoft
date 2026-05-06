@@ -15,3 +15,9 @@ Schedule::command('lembretes:enviar')
     ->dailyAt('08:00')
     ->withoutOverlapping()
     ->onOneServer();
+
+// Facturação mensal Educajá — dia 1 de cada mês às 03:00.
+Schedule::job(new \App\Jobs\GerarFacturasMensaisJob())
+    ->monthlyOn(1, '03:00')
+    ->withoutOverlapping()
+    ->onOneServer();

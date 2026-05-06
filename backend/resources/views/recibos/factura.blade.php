@@ -215,16 +215,27 @@
 @endif
 @endif
 
-{{-- Assinaturas --}}
-<table class="assinaturas">
+{{-- Assinaturas + QR --}}
+@php
+  $codigoEsc = $escola['codigo'] ?? 'esc';
+  $refRec    = $pagamento->referencia ?: ('PAG-' . $pagamento->id);
+  $hash      = $pagamento->hash_factura ? '?h=' . $pagamento->hash_factura : '';
+  $qrData    = url('/verificar-recibo/' . $codigoEsc . '/' . rawurlencode($refRec)) . $hash;
+  $qrUrl     = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&qzone=2&data=' . urlencode($qrData);
+@endphp
+<table class="assinaturas" style="width:100%; margin: 28px 16px 8px;">
   <tr>
-    <td>
+    <td style="width:38%; vertical-align:bottom;">
       <div class="ass-linha"></div>
       <div class="ass-label">Tesoureiro(a)</div>
     </td>
-    <td>
+    <td style="width:38%; vertical-align:bottom;">
       <div class="ass-linha"></div>
       <div class="ass-label">Encarregado de Educação / Aluno</div>
+    </td>
+    <td style="width:24%; text-align:center; vertical-align:bottom;">
+      <img src="{{ $qrUrl }}" alt="QR" style="width:80px;height:80px;border:1px solid #e5e7eb;padding:3px;border-radius:4px;background:#fff;"/>
+      <div style="font-size:8px;color:#94a3b8;margin-top:2px;">Verificar autenticidade</div>
     </td>
   </tr>
 </table>

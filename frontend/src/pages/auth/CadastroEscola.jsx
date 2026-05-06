@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import axios from "axios";
 
 const centralApi = axios.create({
@@ -7,7 +7,11 @@ const centralApi = axios.create({
   headers: { "Content-Type": "application/json", "Accept": "application/json" },
 });
 
-const STEPS = ["Plano", "Escola", "Administrador", "Confirmação"];
+const STEPS = ["Plano", "Escola", "Administrador", "Confirmação", "Pagamento"];
+
+function formatAOA(v) {
+  return new Intl.NumberFormat("pt-AO", { style: "currency", currency: "AOA", minimumFractionDigits: 0 }).format(Number(v || 0));
+}
 
 const CheckIcon = () => (
   <svg className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -16,6 +20,8 @@ const CheckIcon = () => (
 );
 
 export default function CadastroEscola() {
+  const [searchParams] = useSearchParams();
+  const planoQuery = searchParams.get("plano") || "";
   const [step, setStep] = useState(0);
   const [planos, setPlanos] = useState([]);
   const [loadingPlanos, setLoadingPlanos] = useState(true);
@@ -35,14 +41,25 @@ export default function CadastroEscola() {
     admin_email: "",
     admin_password: "",
     admin_password_confirmation: "",
+    aceito_termos: false,
+    termos_versao: "",
   });
+  const [termosAtual, setTermosAtual] = useState(null);
 
   useEffect(() => {
     centralApi.get("/planos").then(r => {
       setPlanos(r.data);
+      if (planoQuery && r.data.some(p => p.id === planoQuery)) {
+        setForm(f => ({ ...f, plano: planoQuery }));
+      }
       setLoadingPlanos(false);
     }).catch(() => setLoadingPlanos(false));
-  }, []);
+
+    centralApi.get("/termos/atual").then(r => {
+      setTermosAtual(r.data);
+      setForm(f => ({ ...f, termos_versao: r.data.versao }));
+    }).catch(() => {});
+  }, [planoQuery]);
 
   const set = (field, value) => {
     setForm(f => ({ ...f, [field]: value }));
@@ -120,25 +137,7 @@ export default function CadastroEscola() {
   };
 
   if (step === 4 && resultado) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-blue-600 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 text-center">
-          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl">✅</div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">Cadastro Recebido!</h2>
-          <p className="text-gray-500 mb-4">{resultado.message}</p>
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-left mb-6">
-            <p className="text-sm text-blue-700 font-medium mb-1">Detalhes do seu registo:</p>
-            <p className="text-sm text-blue-600"><span className="font-medium">Escola:</span> {resultado.nome}</p>
-            <p className="text-sm text-blue-600"><span className="font-medium">Código:</span> {resultado.codigo}</p>
-            <p className="text-sm text-blue-600"><span className="font-medium">Plano:</span> {planoSelecionado?.nome}</p>
-          </div>
-          <p className="text-xs text-gray-400 mb-6">Receberá uma notificação quando a sua conta for activada pela equipa Educajá.</p>
-          <Link to="/login" className="block w-full bg-blue-800 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 transition-colors">
-            Ir para o Login →
-          </Link>
-        </div>
-      </div>
-    );
+    return <PagamentoPanel resultado={resultado} planoSelecionado={planoSelecionado} />;
   }
 
   return (
@@ -286,7 +285,7 @@ export default function CadastroEscola() {
                   <input
                     value={form.endereco}
                     onChange={e => set("endereco", e.target.value)}
-                    placeholder="Ex: Rua Principal, Luanda"
+                    placeholder="Ex: Rua Principal, Benguela"
                     className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -410,17 +409,41 @@ export default function CadastroEscola() {
                   <p className="text-sm text-gray-500">{form.admin_email}</p>
                 </div>
               </div>
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700 mb-6">
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700 mb-4">
                 Ao submeter, o seu pedido será analisado pela equipa Educajá. Receberá uma notificação quando a conta for activada.
               </div>
+
+              <label className={`flex items-start gap-3 p-4 border rounded-xl mb-6 cursor-pointer transition-colors
+                ${errors.aceito_termos ? "border-red-300 bg-red-50" : form.aceito_termos ? "border-blue-300 bg-blue-50" : "border-gray-300 bg-white hover:bg-gray-50"}`}>
+                <input
+                  type="checkbox"
+                  checked={form.aceito_termos}
+                  onChange={(e) => set("aceito_termos", e.target.checked)}
+                  className="mt-0.5 w-4 h-4 accent-blue-600"
+                />
+                <span className="text-sm text-gray-700 leading-relaxed">
+                  Li e aceito os{" "}
+                  <Link to="/termos" target="_blank" className="text-blue-700 font-semibold hover:underline">
+                    Termos e Condições
+                  </Link>
+                  {termosAtual && (
+                    <span className="text-xs text-gray-500"> (versão {termosAtual.versao})</span>
+                  )}
+                  . Confirmo que tenho autoridade para vincular a escola a este contrato.
+                </span>
+              </label>
+              {errors.aceito_termos && (
+                <p className="text-red-500 text-xs -mt-4 mb-4">{Array.isArray(errors.aceito_termos) ? errors.aceito_termos[0] : errors.aceito_termos}</p>
+              )}
+
               <div className="flex justify-between">
                 <button onClick={() => setStep(2)} className="border border-gray-300 text-gray-700 px-6 py-2.5 rounded-xl hover:bg-gray-50 font-medium">
                   ← Voltar
                 </button>
                 <button
                   onClick={handleSubmit}
-                  disabled={submitting}
-                  className="bg-green-600 text-white px-8 py-2.5 rounded-xl hover:bg-green-500 font-semibold disabled:opacity-60"
+                  disabled={submitting || !form.aceito_termos}
+                  className="bg-green-600 text-white px-8 py-2.5 rounded-xl hover:bg-green-500 font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {submitting ? "A submeter..." : "Submeter Pedido ✓"}
                 </button>
@@ -436,6 +459,187 @@ export default function CadastroEscola() {
             Entrar →
           </Link>
         </p>
+      </div>
+    </div>
+  );
+}
+
+function PagamentoPanel({ resultado, planoSelecionado }) {
+  const [estado, setEstado] = useState({
+    factura: resultado.factura,
+    referencia: resultado.referencia,
+    ativo: false,
+    paga: false,
+  });
+  const [copiou, setCopiou] = useState(null);
+
+  const semPagamento = !resultado.factura;
+  const tempoTrial = resultado.tem_trial;
+
+  // Polling do estado a cada 8s para detectar pagamento
+  useEffect(() => {
+    if (semPagamento) return;
+    let cancelado = false;
+    const intervalo = setInterval(async () => {
+      try {
+        const { data } = await centralApi.get(`/cadastros/${resultado.codigo}/estado`);
+        if (cancelado) return;
+        setEstado((prev) => ({
+          ...prev,
+          factura: data.factura ?? prev.factura,
+          referencia: data.referencia ?? prev.referencia,
+          ativo: !!data.ativo,
+          paga: data.factura?.estado === "paga",
+        }));
+      } catch {/* silencioso */}
+    }, 8000);
+    return () => { cancelado = true; clearInterval(intervalo); };
+  }, [resultado.codigo, semPagamento]);
+
+  function copiar(valor, tipo) {
+    navigator.clipboard?.writeText(String(valor));
+    setCopiou(tipo);
+    setTimeout(() => setCopiou(null), 1500);
+  }
+
+  // Caso 1 — plano grátis ou em trial → ecrã simples
+  if (semPagamento) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-blue-600 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 text-center">
+          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl">✅</div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Cadastro Recebido!</h2>
+          <p className="text-gray-500 mb-4">{resultado.message}</p>
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-left mb-6">
+            <p className="text-sm text-blue-700 font-medium mb-1">Detalhes do seu registo:</p>
+            <p className="text-sm text-blue-600"><span className="font-medium">Escola:</span> {resultado.nome}</p>
+            <p className="text-sm text-blue-600"><span className="font-medium">Código:</span> {resultado.codigo}</p>
+            <p className="text-sm text-blue-600"><span className="font-medium">Plano:</span> {planoSelecionado?.nome}</p>
+            {tempoTrial && <p className="text-xs text-blue-700 mt-2 font-semibold">🎁 {planoSelecionado?.dias_trial} dias de teste grátis</p>}
+          </div>
+          <p className="text-xs text-gray-400 mb-6">Receberá uma notificação quando a sua conta for activada pela equipa Educajá.</p>
+          <Link to="/login" className="block w-full bg-blue-800 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 transition-colors">
+            Ir para o Login →
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Caso 2 — pago e activo
+  if (estado.paga && estado.ativo) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-700 via-green-600 to-emerald-500 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 text-center">
+          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl">🎉</div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Conta activada!</h2>
+          <p className="text-gray-500 mb-6">Recebemos o seu pagamento. A sua escola está pronta a usar.</p>
+          <Link to="/login" className="block w-full bg-blue-800 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 transition-colors">
+            Entrar →
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Caso 3 — pago mas ainda a aguardar activação manual
+  if (estado.paga) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-blue-600 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 text-center">
+          <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl">✅</div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Pagamento confirmado!</h2>
+          <p className="text-gray-500 mb-4">A sua factura {estado.factura?.numero} está paga. A equipa Educajá vai activar a sua conta em breve.</p>
+          <Link to="/login" className="block w-full bg-blue-800 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 transition-colors">
+            Ir para o Login →
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Caso 4 — aguardar pagamento (referência Multicaixa)
+  const ref = estado.referencia;
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-blue-600 flex items-start justify-center p-4 py-10">
+      <div className="w-full max-w-2xl">
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-3 text-white text-3xl">💳</div>
+          <h1 className="text-3xl font-bold text-white">Pague para activar a sua conta</h1>
+          <p className="text-blue-200 text-sm mt-1">Use a referência Multicaixa abaixo para concluir o registo.</p>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8">
+          {/* Resumo */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <p className="text-[10px] uppercase text-blue-700 font-bold">Escola</p>
+              <p className="font-semibold text-gray-800">{resultado.nome}</p>
+              <p className="text-xs text-gray-500 font-mono">{resultado.codigo}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase text-blue-700 font-bold">Plano</p>
+              <p className="font-semibold text-gray-800">{planoSelecionado?.nome}</p>
+              <p className="text-xs text-gray-500">Factura {estado.factura?.numero}</p>
+            </div>
+          </div>
+
+          {/* Referência */}
+          <div className="border-2 border-dashed border-blue-300 rounded-2xl p-5 bg-gradient-to-br from-blue-50 to-white mb-5">
+            <p className="text-[10px] uppercase font-bold text-blue-700 tracking-widest mb-3 text-center">Referência Multicaixa Express</p>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                ["Entidade", ref?.entidade, "entidade"],
+                ["Referência", ref?.referencia, "referencia"],
+                ["Valor", ref ? formatAOA(ref.valor) : "—", "valor"],
+              ].map(([label, valor, key]) => (
+                <button key={key} onClick={() => valor && copiar(valor, key)}
+                  className="text-left rounded-lg border border-blue-200 bg-white px-3 py-2.5 hover:bg-blue-50 transition-colors group">
+                  <p className="text-[10px] uppercase text-blue-600 font-bold">{label}</p>
+                  <p className="font-mono font-extrabold text-base text-gray-800 break-all">{valor ?? "—"}</p>
+                  <p className="text-[10px] text-blue-500 mt-0.5 invisible group-hover:visible">
+                    {copiou === key ? "✓ Copiado" : "Clica para copiar"}
+                  </p>
+                </button>
+              ))}
+            </div>
+            {ref?.expira_em && (
+              <p className="text-[11px] text-center text-gray-500 mt-3">
+                Válida até {new Date(ref.expira_em).toLocaleDateString("pt-AO", { day: "2-digit", month: "long", year: "numeric" })}
+              </p>
+            )}
+          </div>
+
+          {/* Como pagar */}
+          <details className="border border-gray-200 rounded-xl p-4 mb-5 bg-gray-50">
+            <summary className="font-semibold text-gray-700 text-sm cursor-pointer">Como pagar?</summary>
+            <ol className="text-xs text-gray-600 mt-3 space-y-1.5 list-decimal list-inside">
+              <li>Abra a sua app de banco ou Multicaixa Express.</li>
+              <li>Escolha "Pagamento por referência" ou "Pagamento de serviços".</li>
+              <li>Insira a entidade, referência e valor acima.</li>
+              <li>Confirme. Pode também pagar em qualquer ATM Multicaixa.</li>
+            </ol>
+          </details>
+
+          {/* Estado actual */}
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center gap-3">
+            <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+            <p className="text-xs text-yellow-800">
+              A aguardar confirmação do pagamento. Esta página actualiza automaticamente quando recebermos o pagamento.
+            </p>
+          </div>
+
+          <p className="text-center text-xs text-gray-400 mt-6">
+            Pode fechar esta página — o seu cadastro fica guardado. Quando pagar, recebemos a notificação automaticamente
+            e activamos a sua conta.
+          </p>
+
+          <div className="flex justify-center gap-3 mt-5">
+            <Link to="/login" className="text-sm text-blue-700 font-semibold hover:underline">
+              Já tenho conta — entrar
+            </Link>
+          </div>
+        </div>
       </div>
     </div>
   );

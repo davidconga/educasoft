@@ -35,7 +35,7 @@ class ReciboPdfController extends Controller {
             "pagamentos" => $pagamentos,
             "aluno"      => $primeiro->aluno,
             "lote_id"    => $loteId,
-            "escola"     => (array) $request->attributes->get("escola", []),
+            "escola"     => optional($request->attributes->get("escola"))->toArray() ?? [],
             "carteira"   => [
                 "total_pago"     => $totalPago,
                 "total_pendente" => $totalPend,
@@ -64,7 +64,7 @@ class ReciboPdfController extends Controller {
             "aluno.matriculas.turma.turnoObj",
             "propina","emolumento","plano","multa",
         ]);
-        $escola = (array) $request->attributes->get("escola", []);
+        $escola = optional($request->attributes->get("escola"))->toArray() ?? [];
 
         // Carteira: agregados gerais
         $alunoId = $pagamento->aluno_id;

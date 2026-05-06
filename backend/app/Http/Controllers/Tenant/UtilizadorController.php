@@ -2,16 +2,42 @@
 namespace App\Http\Controllers\Tenant;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant\User;
+use App\Services\Central\LimitesPlanoService;
 use Illuminate\Http\Request;
 
 class UtilizadorController extends Controller {
 
     private static array $defaultPermissoes = [
-        "admin"       => null, // null = todas as permissões
-        "secretaria"  => ["dashboard","alunos","matriculas","professores","turmas","notas","presencas","horarios","pagamentos","tesouraria","controlo_propinas"],
-        "director"    => ["dashboard","alunos","notas","pagamentos","tesouraria","controlo_propinas"],
-        "tesouraria"  => ["dashboard","pagamentos","tesouraria","controlo_propinas","alunos"],
-        "coordenador" => ["dashboard","alunos","matriculas","turmas","notas","presencas","horarios","controlo_propinas"],
+        // null = todas as permissões
+        "admin" => null,
+
+        "director" => [
+            "dashboard","chat","comunidade",
+            "alunos","matriculas","professores","turmas","notas","presencas","horarios","cartao_estudante","folha_prova",
+            "pos","caixa","pagamentos","tesouraria","controlo_propinas","controlo_emolumentos","carteira_aluno",
+            "relatorio_diario","relatorio_financeiro","precario","bolsas","lembretes",
+            "configuracoes","integracao_vendus","configuracao_impressao",
+        ],
+
+        "secretaria" => [
+            "dashboard","chat",
+            "alunos","matriculas","professores","turmas","notas","presencas","horarios","cartao_estudante",
+            "pos","caixa","pagamentos","controlo_propinas","controlo_emolumentos","carteira_aluno",
+            "lembretes","precario","bolsas",
+        ],
+
+        "tesouraria" => [
+            "dashboard","alunos",
+            "pos","caixa","pagamentos","tesouraria","controlo_propinas","controlo_emolumentos","carteira_aluno",
+            "relatorio_diario","relatorio_financeiro","precario","bolsas","lembretes",
+            "configuracao_impressao","integracao_vendus",
+        ],
+
+        "coordenador" => [
+            "dashboard","chat",
+            "alunos","matriculas","turmas","notas","presencas","horarios",
+            "controlo_propinas",
+        ],
     ];
 
     private function fields(): array {
@@ -34,6 +60,21 @@ class UtilizadorController extends Controller {
             "tipo"     => "required|in:admin,secretaria,director,tesouraria,coordenador",
             "telefone" => "nullable|string|max:50",
         ]);
+
+        // Verificar limite de administradores do plano
+        $escola = $request->attributes->get("escola");
+        if ($escola) {
+            $limite = (new LimitesPlanoService())->admins($escola);
+            if (!$limite["pode"]) {
+                return response()->json([
+                    "message"     => $limite["mensagem"],
+                    "code"        => "limite_admins_atingido",
+                    "limite"      => $limite,
+                    "upgrade_url" => "/upgrade?feature=mais_admins",
+                ], 422);
+            }
+        }
+
         $permissoes = self::$defaultPermissoes[$request->tipo] ?? null;
         $user = User::create([
             ...$request->only(["nome","email","tipo","telefone"]),

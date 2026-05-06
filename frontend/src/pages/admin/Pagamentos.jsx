@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { Printer, Mail, MessageCircle } from "lucide-react";
+import { Printer, Mail, MessageCircle, Receipt, AlertCircle } from "lucide-react";
 import api from "../../services/api";
 import { useAuthStore } from "../../store/auth";
-import { imprimirRecibo } from "../../components/Recibo";
+import { imprimirRecibo, pickMatricula } from "../../components/Recibo";
 import { useMeses } from "../../hooks/useMeses";
 import SaftButton from "../../components/SaftButton";
 
@@ -34,6 +34,10 @@ export default function Pagamentos() {
   const [showBulk, setShowBulk] = useState(false);
   const [bulkForm, setBulkForm] = useState({ metodo:"dinheiro", data_pagamento: new Date().toISOString().split("T")[0] });
   const [bulkLoading, setBulkLoading] = useState(false);
+
+  const [showBulkHist, setShowBulkHist] = useState(false);
+  const [bulkHistForm, setBulkHistForm] = useState({ metodo:"dinheiro", data_pagamento: new Date().toISOString().split("T")[0], observacao: "" });
+  const [bulkHistLoading, setBulkHistLoading] = useState(false);
 
   const ANO_ATUAL = new Date().getFullYear();
   const ANOS = [ANO_ATUAL - 3, ANO_ATUAL - 2, ANO_ATUAL - 1, ANO_ATUAL, ANO_ATUAL + 1];
@@ -80,12 +84,51 @@ export default function Pagamentos() {
   const [estornoMotivo, setEstornoMotivo] = useState("");
   const [estornoLoading, setEstornoLoading] = useState(false);
 
+  const [showNc, setShowNc] = useState(false);
+  const [ncTarget, setNcTarget] = useState(null);
+  const [ncMotivo, setNcMotivo] = useState("");
+  const [ncLoading, setNcLoading] = useState(false);
+
   const confirmaveis = pagamentos.filter(p => p.status === "pendente" || p.status === "vencido" || p.status === "estornado");
   const allSelected  = confirmaveis.length > 0 && selected.length === confirmaveis.length;
 
   const selectedPagamentos  = pagamentos.filter(p => selected.includes(p.id));
   const selecaoSoPagos      = selectedPagamentos.length > 0 && selectedPagamentos.every(p => p.status === "pago");
   const selecaoSoPendentes  = selectedPagamentos.length > 0 && selectedPagamentos.every(p => p.status === "pendente" || p.status === "vencido" || p.status === "estornado");
+
+  const emitirVendus = async (p) => {
+    try {
+      const { data } = await api.post(`/pagamentos/${p.id}/vendus/emitir`);
+      if (!data.ok) { alert(data.erro || "Falhou a emissão Vendus."); return; }
+      load();
+    } catch (e) {
+      alert(e?.response?.data?.erro || e?.response?.data?.message || "Falhou a emissão Vendus.");
+    }
+  };
+
+  const abrirNc = (p) => {
+    setNcTarget(p);
+    setNcMotivo("");
+    setShowNc(true);
+  };
+
+  const handleEmitirNc = async (e) => {
+    e.preventDefault();
+    if (!ncTarget) return;
+    setNcLoading(true);
+    try {
+      const { data } = await api.post(`/pagamentos/${ncTarget.id}/vendus/nota-credito`, { motivo: ncMotivo });
+      if (!data.ok) { alert(data.erro || "Falhou a emissão da Nota de Crédito."); return; }
+      setShowNc(false);
+      setNcTarget(null);
+      setNcMotivo("");
+      load();
+    } catch (err) {
+      alert(err?.response?.data?.erro || err?.response?.data?.message || "Falhou a emissão da Nota de Crédito.");
+    } finally {
+      setNcLoading(false);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -144,6 +187,22 @@ export default function Pagamentos() {
       }
     } finally {
       setBulkLoading(false);
+    }
+  };
+
+  const handleBulkHistorico = async (e) => {
+    e.preventDefault();
+    setBulkHistLoading(true);
+    try {
+      const res = await api.post("/pagamentos/pagar-multiplos-historico", { ids: selected, ...bulkHistForm });
+      setShowBulkHist(false);
+      setSelected([]);
+      load();
+      alert(res.data.message || "Marcados como histórico.");
+    } catch (err) {
+      alert(err.response?.data?.message || "Falha ao marcar como histórico.");
+    } finally {
+      setBulkHistLoading(false);
     }
   };
 
@@ -238,6 +297,13 @@ export default function Pagamentos() {
               <button onClick={() => setShowBulk(true)}
                 className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-500 text-sm font-medium">
                 ✅ Confirmar {selected.length} selecionado{selected.length !== 1 ? "s" : ""}
+              </button>
+            )}
+            {selecaoSoPendentes && escola?.permite_pago_historico && (
+              <button onClick={() => setShowBulkHist(true)}
+                className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-500 text-sm font-medium"
+                title="Marca como pago sem exigir comprovativo (uso para reposição de dados antigos)">
+                📜 Marcar histórico {selected.length}
               </button>
             )}
             <button onClick={() => setShowForm(true)} className="bg-blue-800 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm">
@@ -338,7 +404,22 @@ export default function Pagamentos() {
                     <input type="checkbox" checked={selected.includes(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-gray-300" />
                   </td>
                   <td className="px-6 py-4 text-sm font-mono text-gray-500">{p.referencia}</td>
-                  <td className="px-6 py-4 text-sm font-medium text-gray-800">{p.aluno?.user?.nome}</td>
+                  <td className="px-6 py-4 text-sm">
+                    <div className="font-medium text-gray-800">{p.aluno?.user?.nome}</div>
+                    {(() => {
+                      const m = pickMatricula(p.aluno);
+                      const t = m?.turma;
+                      const partes = [
+                        t?.classe?.curso?.nome,
+                        t?.classe?.nome,
+                        t?.nome,
+                        t?.turnoObj?.nome || t?.turno,
+                      ].filter(Boolean);
+                      return partes.length
+                        ? <div className="text-xs text-gray-500 mt-0.5">{partes.join(" · ")}</div>
+                        : null;
+                    })()}
+                  </td>
                   <td className="px-6 py-4 text-sm text-gray-600">
                     <div className="font-medium">
                       {p.propina?.nome || p.emolumento?.nome || p.plano?.nome || p.observacao || TIPO_LABEL[p.tipo] || p.tipo}
@@ -377,6 +458,53 @@ export default function Pagamentos() {
                         <button onClick={() => imprimirRecibo(p, escola)} title="Imprimir recibo" className="text-slate-400 hover:text-blue-600 transition-colors">
                           <Printer size={16} />
                         </button>
+                        {p.vendus_document_id ? (
+                          p.vendus_pdf_url ? (
+                            <a href={p.vendus_pdf_url} target="_blank" rel="noreferrer"
+                              title={`PDF Vendus${p.vendus_numero ? ` — ${p.vendus_numero}` : ""}`}
+                              className="text-emerald-600 hover:text-emerald-800 transition-colors">
+                              <Receipt size={16} />
+                            </a>
+                          ) : (
+                            <span title={`Emitida no Vendus${p.vendus_numero ? ` — ${p.vendus_numero}` : ""}`} className="text-emerald-600">
+                              <Receipt size={16} />
+                            </span>
+                          )
+                        ) : p.vendus_erro ? (
+                          <button onClick={() => emitirVendus(p)} title={`Vendus falhou — re-emitir\n${p.vendus_erro}`}
+                            className="text-red-500 hover:text-red-700 transition-colors">
+                            <AlertCircle size={16} />
+                          </button>
+                        ) : (
+                          <button onClick={() => emitirVendus(p)} title="Emitir no Vendus"
+                            className="text-slate-400 hover:text-emerald-600 transition-colors">
+                            <Receipt size={16} />
+                          </button>
+                        )}
+                        {p.vendus_document_id && (
+                          p.vendus_nc_document_id ? (
+                            p.vendus_nc_pdf_url ? (
+                              <a href={p.vendus_nc_pdf_url} target="_blank" rel="noreferrer"
+                                title={`PDF Nota de Crédito${p.vendus_nc_numero ? ` — ${p.vendus_nc_numero}` : ""}`}
+                                className="text-rose-600 hover:text-rose-800 transition-colors text-xs font-semibold">
+                                NC
+                              </a>
+                            ) : (
+                              <span title={`Nota de Crédito emitida${p.vendus_nc_numero ? ` — ${p.vendus_nc_numero}` : ""}`}
+                                className="text-rose-600 text-xs font-semibold">NC</span>
+                            )
+                          ) : p.vendus_nc_erro ? (
+                            <button onClick={() => abrirNc(p)} title={`NC falhou — tentar de novo\n${p.vendus_nc_erro}`}
+                              className="text-red-500 hover:text-red-700 transition-colors text-xs font-semibold">
+                              NC!
+                            </button>
+                          ) : (
+                            <button onClick={() => abrirNc(p)} title="Emitir Nota de Crédito Vendus"
+                              className="text-slate-400 hover:text-rose-600 transition-colors text-xs font-semibold">
+                              ↶NC
+                            </button>
+                          )
+                        )}
                         <button onClick={() => abrirEstorno(p)} title="Estornar pagamento" className="text-purple-400 hover:text-purple-700 transition-colors text-xs font-medium">
                           ↩
                         </button>
@@ -475,6 +603,53 @@ export default function Pagamentos() {
         </div>
       )}
 
+      {/* Modal: marcar como pago histórico */}
+      {showBulkHist && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
+            <div className="p-6 border-b flex items-center justify-between">
+              <h2 className="text-lg font-semibold">📜 Marcar {selected.length} como histórico</h2>
+              <button onClick={() => setShowBulkHist(false)} className="text-gray-400">✕</button>
+            </div>
+            <form onSubmit={handleBulkHistorico} className="p-6 space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
+                ⚠️ Modo histórico — marca como pago sem exigir comprovativo nem cobrar multa.
+                Para reposição de pagamentos antigos vindos de sistemas legados.
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Método (registado) *</label>
+                <select required value={bulkHistForm.metodo} onChange={e => setBulkHistForm({...bulkHistForm, metodo: e.target.value})} className="w-full border rounded-lg px-3 py-2">
+                  <option value="dinheiro">Dinheiro</option>
+                  <option value="transferencia">Transferência Bancária</option>
+                  <option value="multicaixa">Multicaixa</option>
+                  <option value="referencia">Referência</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Data do pagamento original *</label>
+                <input type="date" required value={bulkHistForm.data_pagamento} onChange={e => setBulkHistForm({...bulkHistForm, data_pagamento: e.target.value})} className="w-full border rounded-lg px-3 py-2" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Observação (opcional)</label>
+                <input type="text" maxLength={255} value={bulkHistForm.observacao}
+                  onChange={e => setBulkHistForm({...bulkHistForm, observacao: e.target.value})}
+                  className="w-full border rounded-lg px-3 py-2"
+                  placeholder="Ex: Importado do Golfinho legado" />
+              </div>
+              <p className="text-sm text-gray-500">
+                Total: <strong>{pagamentos.filter(p => selected.includes(p.id)).reduce((s,p) => s+Number(p.valor||0), 0).toLocaleString("pt-AO")} Kz</strong>
+              </p>
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setShowBulkHist(false)} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg">Cancelar</button>
+                <button type="submit" disabled={bulkHistLoading} className="flex-1 bg-amber-600 text-white py-2 rounded-lg hover:bg-amber-500 disabled:opacity-60">
+                  {bulkHistLoading ? "A processar..." : "📜 Marcar como pago"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal: estorno */}
       {showEstorno && estornoTarget && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -508,6 +683,46 @@ export default function Pagamentos() {
                 <button type="button" onClick={() => setShowEstorno(false)} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-50">Cancelar</button>
                 <button type="submit" disabled={estornoLoading} className="flex-1 bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-500 disabled:opacity-60">
                   {estornoLoading ? "A processar..." : "↩ Confirmar Estorno"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: emitir Nota de Crédito Vendus */}
+      {showNc && ncTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
+            <div className="p-6 border-b flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-rose-700">↶ Nota de Crédito Vendus</h2>
+              <button onClick={() => setShowNc(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <div className="px-6 pt-4">
+              <div className="bg-rose-50 rounded-xl p-4 text-sm space-y-1 border border-rose-100">
+                <p><span className="text-slate-500">Aluno:</span> <strong>{ncTarget.aluno?.user?.nome}</strong></p>
+                <p><span className="text-slate-500">Factura Vendus:</span> <span className="font-mono">{ncTarget.vendus_numero}</span></p>
+                <p><span className="text-slate-500">Valor:</span> <strong>{Number(ncTarget.valor).toLocaleString("pt-AO")} Kz</strong></p>
+              </div>
+              <p className="text-xs text-amber-700 mt-3 bg-amber-50 rounded-lg p-2 border border-amber-100">
+                ⚠️ Esta acção emite uma <strong>Nota de Crédito fiscal</strong> no Vendus, creditando a factura acima. É <strong>irreversível</strong>.
+              </p>
+            </div>
+            <form onSubmit={handleEmitirNc} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Motivo *</label>
+                <textarea
+                  required minLength={5} maxLength={500} rows={3}
+                  value={ncMotivo}
+                  onChange={e => setNcMotivo(e.target.value)}
+                  placeholder="Ex.: Anulação por erro de emissão / dados de teste"
+                  className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-rose-400 focus:outline-none"
+                />
+              </div>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setShowNc(false)} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-50">Cancelar</button>
+                <button type="submit" disabled={ncLoading || ncMotivo.trim().length < 5} className="flex-1 bg-rose-600 text-white py-2 rounded-lg hover:bg-rose-500 disabled:opacity-60">
+                  {ncLoading ? "A emitir..." : "↶ Emitir NC"}
                 </button>
               </div>
             </form>
