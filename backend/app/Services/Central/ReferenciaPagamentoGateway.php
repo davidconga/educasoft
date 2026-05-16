@@ -2,6 +2,7 @@
 namespace App\Services\Central;
 
 use App\Models\Central\FacturaCentral;
+use App\Models\Central\IntelizeConfig;
 use App\Models\Central\ReferenciaPagamento;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
@@ -22,6 +23,13 @@ use Illuminate\Support\Facades\Http;
  */
 class ReferenciaPagamentoGateway {
     public function gerar(FacturaCentral $factura, ?int $validadeDias = null): ReferenciaPagamento {
+        if (IntelizeConfig::current()->activo) {
+            return app(IntelizeGateway::class)->gerar($factura, $validadeDias);
+        }
+        if (strtolower((string) config("services.referencias.driver", "")) === "intelize") {
+            return app(IntelizeGateway::class)->gerar($factura, $validadeDias);
+        }
+
         $entidade = (string) (env("REF_ENTIDADE", "11111"));
         $validade = Carbon::now()->addDays($validadeDias ?? (int) env("REF_VALIDADE_DIAS", 30));
         $valor    = (float) $factura->total;

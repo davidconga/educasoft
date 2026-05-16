@@ -35,7 +35,7 @@ class ContactoController extends Controller {
         ]));
 
         try {
-            Mail::to("contact@educaja.com")->send(new ContactoMail($data));
+            Mail::to("contact@educaja.ao")->send(new ContactoMail($data));
         } catch (\Throwable $e) {
             Log::warning("Falha ao enviar email de contacto Educajá: " . $e->getMessage(), $data);
         }

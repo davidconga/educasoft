@@ -120,7 +120,7 @@ export default function SiteLayout() {
           <div>
             <h4 className="text-xs font-bold uppercase tracking-widest text-slate-300 mb-3">Contacto</h4>
             <ul className="space-y-2.5 text-sm">
-              <li className="flex items-center gap-2"><Mail size={14}/> <a href="mailto:contact@educaja.com" className="hover:text-white">contact@educaja.com</a></li>
+              <li className="flex items-center gap-2"><Mail size={14}/> <a href="mailto:contact@educaja.ao" className="hover:text-white">contact@educaja.ao</a></li>
               <li className="flex items-center gap-2"><MapPin size={14}/> Benguela, Angola</li>
             </ul>
           </div>

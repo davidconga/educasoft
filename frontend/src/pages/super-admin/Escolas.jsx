@@ -279,7 +279,7 @@ export default function SuperAdminEscolas() {
                   <tr key={escola.id} className="hover:bg-gray-50 group">
                     <td className="px-5 py-3.5">
                       <p className="font-semibold text-gray-800 text-sm">{escola.nome}</p>
-                      <p className="text-xs text-gray-400 font-mono">{escola.codigo}.educa.okulandisa.com</p>
+                      <p className="text-xs text-gray-400 font-mono">{escola.domains?.[0]?.domain ?? `${escola.codigo}.educaja.ao`}</p>
                     </td>
                     <td className="px-5 py-3.5">
                       <p className="text-sm text-gray-600">{escola.email}</p>
@@ -495,7 +495,7 @@ export default function SuperAdminEscolas() {
               { label:"Telefone", value: detailEscola.telefone || "—" },
               { label:"Endereço", value: detailEscola.endereco || "—" },
               { label:"Código",   value: detailEscola.codigo, mono: true },
-              { label:"Domínio",  value: `${detailEscola.codigo}.educa.okulandisa.com`, mono: true },
+              { label:"Domínio",  value: detailEscola.domains?.[0]?.domain ?? `${detailEscola.codigo}.educaja.ao`, mono: true },
             ].map(row => (
               <div key={row.label} className="flex justify-between py-2 border-b border-gray-50 text-sm">
                 <span className="text-gray-500 font-medium">{row.label}</span>

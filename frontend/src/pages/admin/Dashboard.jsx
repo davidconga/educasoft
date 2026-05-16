@@ -11,11 +11,10 @@ import { useAuthStore } from "../../store/auth";
 const cards = [
   { key: "total_alunos",          label: "Alunos",          href: "/alunos",        icon: Users,         color: "blue"    },
   { key: "total_professores",     label: "Professores",     href: "/professores",   icon: GraduationCap, color: "emerald" },
-  { key: "total_turmas",          label: "Turmas",          href: "/turmas",        icon: LayoutGrid,    color: "violet"  },
-  { key: "aulas_hoje",            label: "Aulas Hoje",      href: "/aulas-remotas", icon: Video,         color: "indigo"  },
   {
     key: "receita_mes", label: "Receita do Mês", href: "/pagamentos", icon: Banknote, color: "amber",
-    format: (v) => `${(v || 0).toLocaleString("pt-AO")} Kz`,
+    // pt-AO em alguns browsers usa espaços como separador de milhares — usar pt-PT (pontos) para consistência
+    format: (v) => `${new Intl.NumberFormat("pt-PT", { maximumFractionDigits: 0 }).format(Number(v || 0))} Kz`,
   },
   { key: "pagamentos_pendentes",  label: "Pag. Pendentes",  href: "/pagamentos",   icon: AlertCircle,   color: "rose"    },
 ];
@@ -40,8 +39,8 @@ function Skeleton() {
   return (
     <div className="animate-pulse space-y-8">
       <div className="h-36 bg-slate-200 rounded-3xl" />
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        {Array.from({ length: 6 }).map((_, i) => (
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="bg-white rounded-2xl h-32 shadow-sm" />
         ))}
       </div>
@@ -183,7 +182,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map(card => (
           <StatCard key={card.key} card={card} value={stats[card.key]} />
         ))}

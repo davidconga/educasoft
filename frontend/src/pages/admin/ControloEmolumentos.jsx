@@ -145,7 +145,7 @@ export default function ControloEmolumentos() {
                       return (
                         <td key={t} className="px-2 py-2 text-center">
                           <span className={`w-6 h-6 rounded-sm inline-flex items-center justify-center text-white text-xs font-bold ${STATUS_COLOR[pag.status] ?? "bg-gray-300"}`}
-                            title={`${pag.status} — ${Number(pag.valor).toLocaleString("pt-AO")} Kz`}>
+                            title={`${pag.status} — ${Number(pag.valor).toLocaleString("pt-PT")} Kz`}>
                             {STATUS_LABEL[pag.status] ?? "?"}
                           </span>
                         </td>

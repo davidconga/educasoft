@@ -27,6 +27,12 @@ const MODULOS = [
     ],
   },
   {
+    grupo: "Recursos Humanos",
+    itens: [
+      { key: "rh", label: "Recursos Humanos" },
+    ],
+  },
+  {
     grupo: "Configurações",
     itens: [
       { key: "gestao_escolar",          label: "Classes & Salas" },
@@ -51,6 +57,8 @@ const MODULOS = [
       { key: "controlo_propinas",    label: "Controlo Propinas" },
       { key: "controlo_emolumentos", label: "Controlo Emolumentos" },
       { key: "carteira_aluno",       label: "Carteira do Aluno" },
+      { key: "carteira_depositar",   label: "Carteira — Depositar" },
+      { key: "carteira_levantar",    label: "Carteira — Levantar" },
       { key: "relatorio_diario",     label: "Relatório Diário" },
       { key: "relatorio_financeiro", label: "Relatório Financeiro" },
       { key: "precario",             label: "Preçário" },
@@ -67,7 +75,8 @@ const DEFAULTS = {
   director: [
     "dashboard","chat","comunidade",
     "alunos","matriculas","professores","turmas","notas","presencas","horarios","cartao_estudante","folha_prova",
-    "pos","caixa","pagamentos","tesouraria","controlo_propinas","controlo_emolumentos","carteira_aluno",
+    "rh",
+    "pos","caixa","pagamentos","tesouraria","controlo_propinas","controlo_emolumentos","carteira_aluno","carteira_depositar","carteira_levantar",
     "relatorio_diario","relatorio_financeiro","precario","bolsas","lembretes",
     "configuracoes","integracao_vendus","configuracao_impressao",
   ],
@@ -81,7 +90,7 @@ const DEFAULTS = {
 
   tesouraria: [
     "dashboard","alunos",
-    "pos","caixa","pagamentos","tesouraria","controlo_propinas","controlo_emolumentos","carteira_aluno",
+    "pos","caixa","pagamentos","tesouraria","controlo_propinas","controlo_emolumentos","carteira_aluno","carteira_depositar","carteira_levantar",
     "relatorio_diario","relatorio_financeiro","precario","bolsas","lembretes",
     "configuracao_impressao","integracao_vendus",
   ],

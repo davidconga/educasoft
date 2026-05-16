@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import api from "../../services/api";
 import { useMeses } from "../../hooks/useMeses";
 
-const fmt = (v) => Number(v || 0).toLocaleString("pt-AO");
+const fmt = (v) => Number(v || 0).toLocaleString("pt-PT");
 const ANO_ATUAL = String(new Date().getFullYear());
 const ANOS = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - 2 + i));
 

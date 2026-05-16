@@ -3,7 +3,7 @@ import { useParams, useSearchParams, useLocation } from "react-router-dom";
 import axios from "axios";
 import { CheckCircle2, XCircle, Loader2, Receipt, FileText, Wallet, Building2, ShieldCheck, Calendar, User, Tag } from "lucide-react";
 
-const fmt = (v) => Number(v || 0).toLocaleString("pt-AO") + " Kz";
+const fmt = (v) => Number(v || 0).toLocaleString("pt-PT") + " Kz";
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString("pt-AO") : "—";
 
 /**
@@ -210,7 +210,7 @@ export default function VerificarDocumento() {
         )}
 
         <p className="text-center text-xs text-slate-400 mt-4">
-          Verificado em {new Date().toLocaleString("pt-AO")}
+          Verificado em {new Date().toLocaleString("pt-PT")}
         </p>
       </div>
     </div>

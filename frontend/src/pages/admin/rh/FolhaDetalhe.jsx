@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Plus, Trash2, Download, CheckCircle, XCircle, Save } from "lucide-react";
 import api from "../../../services/api";
 
-const fmt = (v) => Number(v || 0).toLocaleString("pt-AO");
+const fmt = (v) => Number(v || 0).toLocaleString("pt-PT");
 const meses = ["", "Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const ESTADO = {
   rascunho:  { cls: "bg-slate-100 text-slate-600",     l: "Rascunho" },
@@ -288,7 +288,7 @@ function Linha({ label, v, cor, prefix }) {
   return (
     <div className="flex justify-between py-1.5 text-sm">
       <span className="text-slate-600">{label}</span>
-      <span className={`font-semibold ${cor || "text-slate-800"}`}>{prefix || ""}{Number(v || 0).toLocaleString("pt-AO")}</span>
+      <span className={`font-semibold ${cor || "text-slate-800"}`}>{prefix || ""}{Number(v || 0).toLocaleString("pt-PT")}</span>
     </div>
   );
 }

@@ -126,7 +126,7 @@ export default function Contacto() {
                   </div>
                   <div className="min-w-0">
                     <div className="text-xs text-slate-500 font-medium">Email</div>
-                    <a href="mailto:contact@educaja.com" className="text-sm font-semibold text-slate-800 hover:text-blue-700 break-all">contact@educaja.com</a>
+                    <a href="mailto:contact@educaja.ao" className="text-sm font-semibold text-slate-800 hover:text-blue-700 break-all">contact@educaja.ao</a>
                   </div>
                 </li>
                 <li className="flex items-start gap-3">

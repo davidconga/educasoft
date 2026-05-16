@@ -105,15 +105,15 @@ export default function CarteiraAluno() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
           <div className="bg-green-50 border border-green-200 rounded-xl p-4">
             <p className="text-xs text-green-600 font-semibold uppercase">Total Pago</p>
-            <p className="text-xl font-bold text-green-700 mt-1">{Number(resumo?.total_pago ?? 0).toLocaleString("pt-AO")} Kz</p>
+            <p className="text-xl font-bold text-green-700 mt-1">{Number(resumo?.total_pago ?? 0).toLocaleString("pt-PT")} Kz</p>
           </div>
           <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
             <p className="text-xs text-yellow-600 font-semibold uppercase">Em Dívida</p>
-            <p className="text-xl font-bold text-yellow-700 mt-1">{Number(resumo?.total_pendente ?? 0).toLocaleString("pt-AO")} Kz</p>
+            <p className="text-xl font-bold text-yellow-700 mt-1">{Number(resumo?.total_pendente ?? 0).toLocaleString("pt-PT")} Kz</p>
           </div>
           <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
             <p className="text-xs text-purple-600 font-semibold uppercase">Estornado</p>
-            <p className="text-xl font-bold text-purple-700 mt-1">{Number(resumo?.total_estornado ?? 0).toLocaleString("pt-AO")} Kz</p>
+            <p className="text-xl font-bold text-purple-700 mt-1">{Number(resumo?.total_estornado ?? 0).toLocaleString("pt-PT")} Kz</p>
           </div>
           <div className={`border rounded-xl p-4 ${saldoPositivo ? "bg-blue-50 border-blue-200" : "bg-red-50 border-red-200"}`}>
             <p className={`text-xs font-semibold uppercase ${saldoPositivo ? "text-blue-600" : "text-red-600"}`}>Saldo</p>
@@ -122,7 +122,7 @@ export default function CarteiraAluno() {
                 ? <ArrowUpCircle size={18} className="text-blue-500" />
                 : <ArrowDownCircle size={18} className="text-red-500" />}
               <p className={`text-xl font-bold ${saldoPositivo ? "text-blue-700" : "text-red-700"}`}>
-                {Number(Math.abs(resumo?.saldo ?? 0)).toLocaleString("pt-AO")} Kz
+                {Number(Math.abs(resumo?.saldo ?? 0)).toLocaleString("pt-PT")} Kz
               </p>
             </div>
             <p className={`text-xs mt-0.5 ${saldoPositivo ? "text-blue-500" : "text-red-500"}`}>
@@ -138,8 +138,8 @@ export default function CarteiraAluno() {
               <div key={tipo} className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
                 <p className="text-xs text-gray-500 font-semibold uppercase">{TIPO_LABEL[tipo] ?? tipo}</p>
                 <p className="text-sm font-bold text-gray-800 mt-1">{v.count} lançamento{v.count !== 1 ? "s" : ""}</p>
-                <p className="text-xs text-green-600">{Number(v.pago).toLocaleString("pt-AO")} Kz pago</p>
-                {v.pendente > 0 && <p className="text-xs text-yellow-600">{Number(v.pendente).toLocaleString("pt-AO")} Kz pendente</p>}
+                <p className="text-xs text-green-600">{Number(v.pago).toLocaleString("pt-PT")} Kz pago</p>
+                {v.pendente > 0 && <p className="text-xs text-yellow-600">{Number(v.pendente).toLocaleString("pt-PT")} Kz pendente</p>}
               </div>
             ))}
           </div>
@@ -191,7 +191,7 @@ export default function CarteiraAluno() {
                     {p.data_pagamento ? new Date(p.data_pagamento).toLocaleDateString("pt-AO") : "—"}
                   </td>
                   <td className={`px-4 py-3 text-right font-semibold ${p.status === "estornado" ? "line-through text-gray-400" : "text-gray-800"}`}>
-                    {Number(p.valor).toLocaleString("pt-AO")} Kz
+                    {Number(p.valor).toLocaleString("pt-PT")} Kz
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_BADGE[p.status] ?? "bg-gray-100 text-gray-500"}`}>

@@ -13,6 +13,7 @@ use App\Http\Controllers\Tenant\RegraAproveitamentoController;
 use App\Http\Controllers\Tenant\TipoDocumentoController;
 use App\Http\Controllers\Tenant\AlunoDocumentoEntregaController;
 use App\Http\Controllers\Tenant\FuncionarioController;
+use App\Http\Controllers\Tenant\GuiaController;
 use App\Http\Controllers\Tenant\FolhaPagamentoController;
 use App\Http\Controllers\Tenant\PresencaFuncionarioController;
 use App\Http\Controllers\Tenant\MesController;
@@ -67,6 +68,7 @@ Route::prefix("api/tenant")->middleware([InitializeTenant::class, \Illuminate\Ro
         Route::apiResource("alunos", AlunoController::class)->except(["store"]);
 
         // ── RH: Funcionários e Folhas de Pagamento ──
+        Route::get("rh/guia-rapido.pdf", [GuiaController::class, "rh"]);
         Route::get("rh/dashboard", [FuncionarioController::class, "dashboard"]);
         Route::get("rh/professores-sem-funcionario", [FuncionarioController::class, "professoresSemFuncionario"]);
         Route::post("rh/funcionarios/criar-de-professor", [FuncionarioController::class, "criarDeProfessor"]);
@@ -167,7 +169,9 @@ Route::prefix("api/tenant")->middleware([InitializeTenant::class, \Illuminate\Ro
             Route::patch("pagamentos/{pagamento}/estornar", [PagamentoController::class, "estornar"]);
             Route::post("pagamentos/{pagamento}/vendus/emitir", [PagamentoController::class, "emitirVendus"]);
             Route::post("pagamentos/{pagamento}/vendus/nota-credito", [PagamentoController::class, "emitirNotaCreditoVendus"]);
-            Route::get("pagamentos/carteira/{alunoId}",     [PagamentoController::class, "carteira"]);
+            Route::get("pagamentos/carteira/{alunoId}",                [PagamentoController::class, "carteira"]);
+            Route::post("pagamentos/carteira/{alunoId}/depositar",     [PagamentoController::class, "depositarCarteira"]);
+            Route::post("pagamentos/carteira/{alunoId}/levantar",      [PagamentoController::class, "levantarCarteira"]);
             Route::get("planos-pagamento", [PagamentoController::class, "planos"]);
             Route::post("planos-pagamento", [PagamentoController::class, "storePlano"]);
         });
@@ -227,6 +231,7 @@ Route::prefix("api/tenant")->middleware([InitializeTenant::class, \Illuminate\Ro
             Route::get("pos/alunos/{aluno}/dividas", [PosController::class, "dividasAluno"]);
             Route::get("pos/verificar-referencia", [PosController::class, "verificarReferencia"]);
             Route::post("pos/cobrar", [PosController::class, "cobrar"]);
+            Route::get("pos/recibo/{loteOrPag}", [PosController::class, "recibo"]);
         });
 
         // Utilizadores (admins)

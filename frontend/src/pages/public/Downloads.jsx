@@ -32,7 +32,7 @@ const APPS = [
     icon: Apple,
     title: "iOS",
     subtitle: "iPhone & iPad — iOS 14+",
-    desc: "A versão para iOS está em desenvolvimento. Entretanto pode aceder via Safari em educa.okulandisa.com.",
+    desc: "A versão para iOS está em desenvolvimento. Entretanto pode aceder via Safari em educaja.ao.",
     href: null,
     available: false,
     color: "from-slate-500 to-slate-700",

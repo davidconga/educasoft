@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Mail, MessageCircle } from "lucide-react";
 import api from "../../services/api";
 import { useAuthStore } from "../../store/auth";
+import { usePermissao } from "../../hooks/usePermissao";
 import { imprimirRecibo, buildReciboHtml } from "../../components/Recibo";
 import { useMeses } from "../../hooks/useMeses";
 import SaftButton from "../../components/SaftButton";
@@ -16,7 +17,7 @@ const enviarLembrete = async (id, canal) => {
   }
 };
 
-const fmt = (v) => Number(v || 0).toLocaleString("pt-AO");
+const fmt = (v) => Number(v || 0).toLocaleString("pt-PT");
 const ANO_ATUAL = String(new Date().getFullYear());
 const ANOS = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - 1 + i));
 const getAnoFromMesRef = (mr) => { if (!mr) return null; const m = mr.match(/\b(\d{4})\b/); return m ? m[1] : null; };
@@ -56,10 +57,11 @@ function EmptyState({ msg }) {
   );
 }
 
-function MetodoSelector({ value, onChange }) {
+function MetodoSelector({ value, onChange, extras = [] }) {
+  const methods = ["dinheiro","transferencia","multicaixa", ...extras];
   return (
-    <div className="grid grid-cols-3 gap-2">
-      {["dinheiro","transferencia","multicaixa"].map(m => (
+    <div className={`grid gap-2 ${methods.length > 3 ? "grid-cols-2" : "grid-cols-3"}`}>
+      {methods.map(m => (
         <button key={m} type="button" onClick={() => onChange(m)}
           className={`py-2 rounded-xl text-xs font-medium capitalize border transition-colors ${value === m ? "bg-blue-600 text-white border-blue-600" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
           {m}
@@ -580,6 +582,9 @@ function formatMesRef(mr, meses) {
 
 export default function Tesouraria() {
   const { escola } = useAuthStore();
+  const { can } = usePermissao();
+  const podeDepositar = can("carteira_depositar");
+  const podeLevantar  = can("carteira_levantar");
   const meses = useMeses();
   const [alunos, setAlunos]             = useState([]);
   const [search, setSearch]             = useState("");
@@ -608,6 +613,7 @@ export default function Tesouraria() {
   const [confirmEntregue, setConfirmEntregue] = useState("");
   const [confirmNumRef, setConfirmNumRef]   = useState("");
   const [confirmError, setConfirmError]     = useState("");
+  const [confirmCarteira, setConfirmCarteira] = useState("");
 
   // Bulk selection state (list view)
   const [selectedIds, setSelectedIds]     = useState(new Set());
@@ -615,10 +621,19 @@ export default function Tesouraria() {
   const [bulkData, setBulkData]           = useState("");
   const [bulkEntregue, setBulkEntregue]   = useState("");
   const [bulkNumRef, setBulkNumRef]       = useState("");
+  const [bulkCarteira, setBulkCarteira]   = useState("");
   const [bulkError, setBulkError]         = useState("");
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
   const [payingBulk, setPayingBulk]       = useState(false);
   const [warnId, setWarnId]               = useState(null);
+
+  // Carteira: saldo + modais de depósito/levantamento
+  const [saldoCarteiraSrv, setSaldoCarteiraSrv] = useState(0);
+  const [showDeposito, setShowDeposito]   = useState(false);
+  const [showLevantamento, setShowLevantamento] = useState(false);
+  const [carteiraForm, setCarteiraForm]   = useState({ valor: "", metodo: "dinheiro", num_referencia_externa: "", observacao: "" });
+  const [carteiraSaving, setCarteiraSaving] = useState(false);
+  const [carteiraError, setCarteiraError] = useState("");
 
   useEffect(() => {
     api.get("/alunos?per_page=5000")
@@ -637,12 +652,14 @@ export default function Tesouraria() {
     setSelectedIds(new Set());
     setLoadingDetalhe(true);
     try {
-      const [pRes, rRes] = await Promise.all([
+      const [pRes, rRes, cRes] = await Promise.all([
         api.get(`/pagamentos?aluno_id=${aluno.id}&per_page=200`),
         api.get(`/pagamentos/relatorio?aluno_id=${aluno.id}`).catch(() => ({ data: {} })),
+        api.get(`/pagamentos/carteira/${aluno.id}`).catch(() => ({ data: { resumo: {} } })),
       ]);
       setPagamentos(pRes.data.data || pRes.data);
       setResumo(rRes.data);
+      setSaldoCarteiraSrv(Number(cRes.data?.resumo?.saldo_carteira || 0));
     } finally {
       setLoadingDetalhe(false);
     }
@@ -653,6 +670,61 @@ export default function Tesouraria() {
 
   const recarregarAluno = () => alunoSel && selecionarAluno(alunoSel);
 
+  const submeterDeposito = async (e) => {
+    e.preventDefault();
+    setCarteiraError("");
+    const valorNum = parseFloat(String(carteiraForm.valor).replace(",", "."));
+    if (!Number.isFinite(valorNum) || valorNum <= 0) {
+      setCarteiraError("Indique um valor válido (maior que zero).");
+      return;
+    }
+    const exigeNumRef = ["multicaixa","transferencia","referencia"].includes(carteiraForm.metodo);
+    if (exigeNumRef && !carteiraForm.num_referencia_externa.trim()) {
+      setCarteiraError(`Para método "${carteiraForm.metodo}", indique o nº de referência.`);
+      return;
+    }
+    setCarteiraSaving(true);
+    try {
+      await api.post(`/pagamentos/carteira/${alunoSel.id}/depositar`, {
+        valor: valorNum,
+        metodo: carteiraForm.metodo,
+        num_referencia_externa: carteiraForm.num_referencia_externa || null,
+        observacao: carteiraForm.observacao || null,
+      });
+      setShowDeposito(false);
+      setCarteiraForm({ valor: "", metodo: "dinheiro", num_referencia_externa: "", observacao: "" });
+      recarregarAluno();
+    } catch (err) {
+      setCarteiraError(err.response?.data?.message || "Falha ao registar depósito.");
+    } finally {
+      setCarteiraSaving(false);
+    }
+  };
+
+  const submeterLevantamento = async (e) => {
+    e.preventDefault();
+    setCarteiraError("");
+    const valorNum = parseFloat(String(carteiraForm.valor).replace(",", "."));
+    if (!Number.isFinite(valorNum) || valorNum <= 0) {
+      setCarteiraError("Indique um valor válido (maior que zero).");
+      return;
+    }
+    setCarteiraSaving(true);
+    try {
+      await api.post(`/pagamentos/carteira/${alunoSel.id}/levantar`, {
+        valor: valorNum,
+        observacao: carteiraForm.observacao || null,
+      });
+      setShowLevantamento(false);
+      setCarteiraForm({ valor: "", metodo: "dinheiro", num_referencia_externa: "", observacao: "" });
+      recarregarAluno();
+    } catch (err) {
+      setCarteiraError(err.response?.data?.message || "Falha ao registar levantamento.");
+    } finally {
+      setCarteiraSaving(false);
+    }
+  };
+
   const confirmarPagamento = async () => {
     // Validação client-side: nº referência obrigatório para multicaixa/transferência/referencia
     setConfirmError("");
@@ -661,13 +733,17 @@ export default function Tesouraria() {
       setConfirmError(`Para método "${confirmMetodo}", é obrigatório indicar o nº de referência.`);
       return;
     }
+    const usaCarteira = confirmMetodo === "carteira";
+    const carteiraNum = parseFloat(String(confirmCarteira).replace(",", "."));
+    const carteiraValido = !usaCarteira && Number.isFinite(carteiraNum) && carteiraNum > 0;
     let pagamentoId = null;
     try {
       const res = await api.patch(`/pagamentos/${confirmId}/pagar`, {
         metodo: confirmMetodo,
         data_pagamento: confirmData || new Date().toISOString().split("T")[0],
-        num_referencia_externa: confirmNumRef || null,
-        ...(Number(confirmEntregue) > 0 ? { valor_entregue: Number(confirmEntregue) } : {}),
+        num_referencia_externa: usaCarteira ? null : (confirmNumRef || null),
+        ...(!usaCarteira && Number(confirmEntregue) > 0 ? { valor_entregue: Number(confirmEntregue) } : {}),
+        ...(carteiraValido ? { valor_carteira: carteiraNum } : {}),
       });
       pagamentoId = res.data?.pagamento?.id;
     } catch (err) {
@@ -751,6 +827,9 @@ export default function Tesouraria() {
       return;
     }
     const ids = mensalidadesSorted.filter(m => selectedIds.has(m.id)).map(m => m.id);
+    const usaCarteira = bulkMetodo === "carteira";
+    const carteiraNum = parseFloat(String(bulkCarteira).replace(",", "."));
+    const carteiraValido = !usaCarteira && Number.isFinite(carteiraNum) && carteiraNum > 0;
     setPayingBulk(true);
     let loteId = null;
     try {
@@ -758,18 +837,20 @@ export default function Tesouraria() {
         ids,
         metodo: bulkMetodo,
         data_pagamento: bulkData || new Date().toISOString().split("T")[0],
-        num_referencia_externa: bulkNumRef || null,
-        ...(Number(bulkEntregue) > 0 ? { valor_entregue: Number(bulkEntregue) } : {}),
+        num_referencia_externa: usaCarteira ? null : (bulkNumRef || null),
+        ...(!usaCarteira && Number(bulkEntregue) > 0 ? { valor_entregue: Number(bulkEntregue) } : {}),
+        ...(carteiraValido ? { valor_carteira: carteiraNum } : {}),
       });
       // Pega o lote_id do primeiro pagamento devolvido (todos compartilham o mesmo)
       loteId = res.data?.pagamentos?.[0]?.lote_id ?? null;
-    } catch (e) {
-      console.error(e);
-      throw e;
-    } finally {
-      setPayingBulk(false);
       setShowBulkConfirm(false);
       setSelectedIds(new Set());
+    } catch (e) {
+      setBulkError(e.response?.data?.message || "Erro ao pagar lote.");
+      setPayingBulk(false);
+      return;
+    } finally {
+      setPayingBulk(false);
       recarregarAluno();
     }
     // Após o flow finalizar, abre o PDF do lote (consolidado)
@@ -900,6 +981,21 @@ export default function Tesouraria() {
               </div>
               {/* Botões de acção */}
               <div className="flex items-center gap-2">
+                {podeDepositar && (
+                  <button onClick={() => { setCarteiraError(""); setCarteiraForm({ valor: "", metodo: "dinheiro", num_referencia_externa: "", observacao: "" }); setShowDeposito(true); }}
+                    className="flex items-center gap-1.5 border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 text-xs font-medium px-3 py-2 rounded-xl transition-colors">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+                    Depositar
+                  </button>
+                )}
+                {podeLevantar && (
+                  <button onClick={() => { setCarteiraError(""); setCarteiraForm({ valor: "", metodo: "dinheiro", num_referencia_externa: "", observacao: "" }); setShowLevantamento(true); }}
+                    disabled={saldoCarteiraSrv <= 0}
+                    className="flex items-center gap-1.5 border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium px-3 py-2 rounded-xl transition-colors">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                    Levantar
+                  </button>
+                )}
                 <button onClick={() => setShowGerarEmolumentos(true)}
                   className="flex items-center gap-1.5 border border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100 text-xs font-medium px-3 py-2 rounded-xl transition-colors">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
@@ -925,10 +1021,11 @@ export default function Tesouraria() {
             ) : (
               <>
                 {/* Cards de resumo */}
-                <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="grid grid-cols-4 gap-3 mb-4">
                   <StatCard label="Total Pago"     value={fmt(totalPago)}     sub={`${pagamentos.filter(p=>p.status==="pago").length} pagamentos`}     color="bg-emerald-50 text-emerald-800" />
                   <StatCard label="Total Pendente" value={fmt(totalPendente)} sub={`${pagamentos.filter(p=>p.status==="pendente").length} em aberto`}    color="bg-amber-50  text-amber-800"   />
                   <StatCard label="Total Vencido"  value={fmt(totalVencido)}  sub={`${pagamentos.filter(p=>p.status==="vencido").length} vencidos`}      color="bg-red-50    text-red-800"     />
+                  <StatCard label="Saldo Carteira" value={fmt(saldoCarteiraSrv)} sub={saldoCarteiraSrv > 0 ? "disponível" : "sem saldo"}                  color={saldoCarteiraSrv > 0 ? "bg-indigo-50 text-indigo-800" : "bg-slate-50 text-slate-500"} />
                 </div>
 
                 {/* Tabs: Lista | Calendário */}
@@ -946,7 +1043,7 @@ export default function Tesouraria() {
                 {view === "calendario" ? (
                   <CalendarioPropinas
                     alunoSel={alunoSel}
-                    onConfirmar={(id) => { setConfirmId(id); setConfirmMetodo("dinheiro"); }}
+                    onConfirmar={(id) => { setConfirmId(id); setConfirmMetodo("dinheiro"); setConfirmCarteira(""); }}
                   />
                 ) : (
                   <>
@@ -989,7 +1086,7 @@ export default function Tesouraria() {
                             className="text-xs text-slate-500 hover:text-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 bg-white">
                             Limpar
                           </button>
-                          <button onClick={() => setShowBulkConfirm(true)}
+                          <button onClick={() => { setBulkCarteira(""); setShowBulkConfirm(true); }}
                             className="text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg transition-colors">
                             Pagar Seleccionadas
                           </button>
@@ -1107,6 +1204,7 @@ export default function Tesouraria() {
                                               setConfirmMetodo("dinheiro");
                                               setConfirmData(new Date().toISOString().split("T")[0]);
                                               setConfirmEntregue("");
+                                              setConfirmCarteira("");
                                             }}
                                             className="text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
                                           >
@@ -1274,9 +1372,22 @@ export default function Tesouraria() {
         const valorBase    = Number(confirmPag.valor || 0);
         const multaValor   = Number(confirmPag.multa_valor || 0);
         const valorAPagar  = valorBase + multaValor;
+        const saldoCarteira = saldoCarteiraSrv;
+        const podeCarteira  = saldoCarteira >= valorAPagar - 0.001;
+        const usandoCarteira = confirmMetodo === "carteira";
+        const carteiraAplicar = (() => {
+          if (usandoCarteira) return 0;
+          const n = parseFloat(String(confirmCarteira).replace(",", "."));
+          if (!Number.isFinite(n) || n <= 0) return 0;
+          return Math.min(n, saldoCarteira, valorAPagar);
+        })();
+        const restoCash    = Math.max(0, valorAPagar - carteiraAplicar);
         const entregue     = Number(confirmEntregue || 0);
-        const troco        = entregue > 0 ? entregue - valorAPagar : null;
-        const saldoCarteira = totalPago - totalPendente;
+        const troco        = entregue > 0 ? entregue - restoCash : null;
+        const isCash       = confirmMetodo === "dinheiro";
+        const cobre        = usandoCarteira
+          ? podeCarteira
+          : (isCash ? entregue + carteiraAplicar >= valorAPagar - 0.001 : true);
         const vencidos     = pagamentos.filter(p => p.status === "vencido" && p.id !== confirmId);
         const tipoLabels   = { mensalidade:"Mensalidade", matricula:"Matrícula", emolumento:"Emolumento", outro:"Outro" };
         const descricao    = (tipoLabels[confirmPag.tipo] || confirmPag.tipo) + (confirmPag.mes_referencia ? ` · ${confirmPag.mes_referencia}` : "");
@@ -1380,8 +1491,38 @@ export default function Tesouraria() {
 
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1.5">Método de Pagamento</label>
-                    <MetodoSelector value={confirmMetodo} onChange={(m) => { setConfirmMetodo(m); setConfirmError(""); }} />
+                    <MetodoSelector value={confirmMetodo} onChange={(m) => { setConfirmMetodo(m); setConfirmError(""); if (m === "carteira") setConfirmCarteira(""); }} extras={saldoCarteira > 0 ? ["carteira"] : []} />
+                    {usandoCarteira && (
+                      <p className={`text-xs mt-2 ${podeCarteira ? "text-indigo-600" : "text-red-600"}`}>
+                        {podeCarteira
+                          ? `Será debitado ${fmt(valorAPagar)} Kz do saldo em carteira (disponível ${fmt(saldoCarteira)} Kz).`
+                          : `Saldo insuficiente: necessário ${fmt(valorAPagar)} Kz, disponível ${fmt(saldoCarteira)} Kz.`}
+                      </p>
+                    )}
                   </div>
+
+                  {!usandoCarteira && saldoCarteira > 0 && (
+                    <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-medium text-indigo-700">Aplicar do saldo carteira (Kz)</label>
+                        <button type="button"
+                          onClick={() => setConfirmCarteira(String(Math.min(saldoCarteira, valorAPagar)))}
+                          className="text-[10px] font-semibold text-indigo-700 hover:text-indigo-900 px-2 py-0.5 rounded border border-indigo-300 bg-white">
+                          Máximo
+                        </button>
+                      </div>
+                      <input type="text" inputMode="decimal" autoComplete="off"
+                        value={confirmCarteira}
+                        onChange={e => setConfirmCarteira(e.target.value.replace(/[^\d.,]/g, ""))}
+                        placeholder={`0 (disponível ${fmt(saldoCarteira)} Kz)`}
+                        className="w-full border border-indigo-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white" />
+                      {carteiraAplicar > 0 && (
+                        <p className="text-[11px] text-indigo-700 mt-1.5">
+                          {fmt(carteiraAplicar)} Kz da carteira · resto a pagar: <strong>{fmt(restoCash)} Kz</strong>
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   {["multicaixa","transferencia","referencia"].includes(confirmMetodo) && (
                     <div>
@@ -1400,10 +1541,10 @@ export default function Tesouraria() {
                     </div>
                   )}
 
-                  {entregue > 0 && (
+                  {!usandoCarteira && entregue > 0 && (
                     <div className={`flex items-center justify-between rounded-xl px-4 py-3 ${troco >= 0 ? "bg-emerald-50 border border-emerald-200" : "bg-red-50 border border-red-200"}`}>
                       <span className={`text-sm font-semibold ${troco >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-                        {troco >= 0 ? "Troco a devolver" : "Valor insuficiente"}
+                        {troco >= 0 ? `Troco a devolver${carteiraAplicar > 0 ? ` (sobre ${fmt(restoCash)} Kz em dinheiro)` : ""}` : "Valor insuficiente"}
                       </span>
                       <span className={`text-lg font-bold ${troco >= 0 ? "text-emerald-700" : "text-red-700"}`}>
                         {troco >= 0 ? fmt(troco) : fmt(Math.abs(troco))} Kz
@@ -1420,7 +1561,9 @@ export default function Tesouraria() {
                   Cancelar
                 </button>
                 <button onClick={confirmarPagamento}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">
+                  disabled={!cobre}
+                  title={!cobre ? (usandoCarteira ? "Saldo insuficiente" : "Valor entregue insuficiente para cobrir o total") : ""}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2.5 rounded-xl text-sm font-medium transition-colors">
                   Confirmar Pagamento
                 </button>
               </div>
@@ -1435,9 +1578,22 @@ export default function Tesouraria() {
         const totalBaseBulk = selecionados.reduce((s, p) => s + Number(p.valor || 0), 0);
         const totalMultaBulk = selecionados.reduce((s, p) => s + Number(p.multa_valor || 0), 0);
         const totalBulk     = totalBaseBulk + totalMultaBulk;
+        const saldoCarteira = saldoCarteiraSrv;
+        const podeCarteiraB = saldoCarteira >= totalBulk - 0.001;
+        const usandoCarteiraB = bulkMetodo === "carteira";
+        const carteiraAplicarB = (() => {
+          if (usandoCarteiraB) return 0;
+          const n = parseFloat(String(bulkCarteira).replace(",", "."));
+          if (!Number.isFinite(n) || n <= 0) return 0;
+          return Math.min(n, saldoCarteira, totalBulk);
+        })();
+        const restoCashB    = Math.max(0, totalBulk - carteiraAplicarB);
         const entregueB     = Number(bulkEntregue || 0);
-        const trocoB        = entregueB > 0 ? entregueB - totalBulk : null;
-        const saldoCarteira = totalPago - totalPendente;
+        const trocoB        = entregueB > 0 ? entregueB - restoCashB : null;
+        const isCashB       = bulkMetodo === "dinheiro";
+        const cobreB        = usandoCarteiraB
+          ? podeCarteiraB
+          : (isCashB ? entregueB + carteiraAplicarB >= totalBulk - 0.001 : true);
         const vencidos      = pagamentos.filter(p => p.status === "vencido" && !selectedIds.has(p.id));
         const tipoLabels    = { mensalidade:"Mensalidade", matricula:"Matrícula", emolumento:"Emolumento", outro:"Outro" };
 
@@ -1537,8 +1693,38 @@ export default function Tesouraria() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1.5">Método de Pagamento</label>
-                    <MetodoSelector value={bulkMetodo} onChange={(m) => { setBulkMetodo(m); setBulkError(""); }} />
+                    <MetodoSelector value={bulkMetodo} onChange={(m) => { setBulkMetodo(m); setBulkError(""); if (m === "carteira") setBulkCarteira(""); }} extras={saldoCarteira > 0 ? ["carteira"] : []} />
+                    {usandoCarteiraB && (
+                      <p className={`text-xs mt-2 ${podeCarteiraB ? "text-indigo-600" : "text-red-600"}`}>
+                        {podeCarteiraB
+                          ? `Será debitado ${fmt(totalBulk)} Kz do saldo em carteira (disponível ${fmt(saldoCarteira)} Kz).`
+                          : `Saldo insuficiente: necessário ${fmt(totalBulk)} Kz, disponível ${fmt(saldoCarteira)} Kz.`}
+                      </p>
+                    )}
                   </div>
+
+                  {!usandoCarteiraB && saldoCarteira > 0 && (
+                    <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-medium text-indigo-700">Aplicar do saldo carteira (Kz)</label>
+                        <button type="button"
+                          onClick={() => setBulkCarteira(String(Math.min(saldoCarteira, totalBulk)))}
+                          className="text-[10px] font-semibold text-indigo-700 hover:text-indigo-900 px-2 py-0.5 rounded border border-indigo-300 bg-white">
+                          Máximo
+                        </button>
+                      </div>
+                      <input type="text" inputMode="decimal" autoComplete="off"
+                        value={bulkCarteira}
+                        onChange={e => setBulkCarteira(e.target.value.replace(/[^\d.,]/g, ""))}
+                        placeholder={`0 (disponível ${fmt(saldoCarteira)} Kz)`}
+                        className="w-full border border-indigo-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white" />
+                      {carteiraAplicarB > 0 && (
+                        <p className="text-[11px] text-indigo-700 mt-1.5">
+                          {fmt(carteiraAplicarB)} Kz da carteira · resto a pagar: <strong>{fmt(restoCashB)} Kz</strong>
+                        </p>
+                      )}
+                    </div>
+                  )}
                   {["multicaixa","transferencia","referencia"].includes(bulkMetodo) && (
                     <div>
                       <label className="block text-xs font-medium text-slate-600 mb-1.5">
@@ -1554,10 +1740,10 @@ export default function Tesouraria() {
                       {bulkError}
                     </div>
                   )}
-                  {entregueB > 0 && (
+                  {!usandoCarteiraB && entregueB > 0 && (
                     <div className={`flex items-center justify-between rounded-xl px-4 py-3 ${trocoB >= 0 ? "bg-emerald-50 border border-emerald-200" : "bg-red-50 border border-red-200"}`}>
                       <span className={`text-sm font-semibold ${trocoB >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-                        {trocoB >= 0 ? "Troco a devolver" : "Valor insuficiente"}
+                        {trocoB >= 0 ? `Troco a devolver${carteiraAplicarB > 0 ? ` (sobre ${fmt(restoCashB)} Kz em dinheiro)` : ""}` : "Valor insuficiente"}
                       </span>
                       <span className={`text-lg font-bold ${trocoB >= 0 ? "text-emerald-700" : "text-red-700"}`}>
                         {trocoB >= 0 ? fmt(trocoB) : fmt(Math.abs(trocoB))} Kz
@@ -1573,8 +1759,9 @@ export default function Tesouraria() {
                   className="flex-1 border border-slate-200 text-slate-600 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors">
                   Cancelar
                 </button>
-                <button onClick={pagarSelecionados} disabled={payingBulk}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">
+                <button onClick={pagarSelecionados} disabled={payingBulk || !cobreB}
+                  title={!cobreB ? (usandoCarteiraB ? "Saldo insuficiente" : "Valor entregue insuficiente para cobrir o total") : ""}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed text-white py-2.5 rounded-xl text-sm font-medium transition-colors">
                   {payingBulk ? "A pagar..." : `Confirmar ${selecionados.length} Pagamento(s)`}
                 </button>
               </div>
@@ -1599,6 +1786,122 @@ export default function Tesouraria() {
           onClose={() => setShowGerarEmolumentos(false)}
           onSuccess={() => { recarregarAluno(); }}
         />
+      )}
+
+      {/* ─── Modal: Depositar em Carteira ─── */}
+      {showDeposito && alunoSel && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-emerald-600"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-800">Depositar em Carteira</h3>
+                  <p className="text-xs text-slate-400">{alunoSel.user?.nome} · Saldo actual {fmt(saldoCarteiraSrv)} Kz</p>
+                </div>
+              </div>
+              <button onClick={() => setShowDeposito(false)} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <form onSubmit={submeterDeposito} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">Valor a depositar (Kz) *</label>
+                <input type="text" inputMode="decimal" autoComplete="off" value={carteiraForm.valor}
+                  onChange={e => setCarteiraForm(f => ({ ...f, valor: e.target.value.replace(/[^\d.,]/g, "") }))}
+                  placeholder="0"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">Método de Entrada</label>
+                <MetodoSelector value={carteiraForm.metodo} onChange={(m) => { setCarteiraForm(f => ({ ...f, metodo: m })); setCarteiraError(""); }} />
+              </div>
+              {["multicaixa","transferencia","referencia"].includes(carteiraForm.metodo) && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Nº de Referência <span className="text-red-500">*</span></label>
+                  <input value={carteiraForm.num_referencia_externa}
+                    onChange={e => setCarteiraForm(f => ({ ...f, num_referencia_externa: e.target.value }))}
+                    placeholder="Nº de referência da operação"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50" />
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">Observação</label>
+                <input value={carteiraForm.observacao}
+                  onChange={e => setCarteiraForm(f => ({ ...f, observacao: e.target.value }))}
+                  placeholder="Ex.: Pré-pagamento de propinas Set–Dez"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50" />
+              </div>
+              {carteiraError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-xl text-xs">{carteiraError}</div>
+              )}
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setShowDeposito(false)}
+                  className="flex-1 border border-slate-200 text-slate-600 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={carteiraSaving}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-sm font-medium disabled:opacity-60 transition-colors">
+                  {carteiraSaving ? "A depositar..." : "Depositar"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Modal: Levantar de Carteira ─── */}
+      {showLevantamento && alunoSel && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-amber-600"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-800">Levantar de Carteira</h3>
+                  <p className="text-xs text-slate-400">{alunoSel.user?.nome} · Saldo disponível {fmt(saldoCarteiraSrv)} Kz</p>
+                </div>
+              </div>
+              <button onClick={() => setShowLevantamento(false)} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <form onSubmit={submeterLevantamento} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">Valor a levantar (Kz) *</label>
+                <input type="text" inputMode="decimal" autoComplete="off" value={carteiraForm.valor}
+                  onChange={e => setCarteiraForm(f => ({ ...f, valor: e.target.value.replace(/[^\d.,]/g, "") }))}
+                  placeholder="0"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 bg-slate-50" />
+                <p className="text-xs text-slate-400 mt-1">Saídas em dinheiro são registadas na sessão de caixa.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">Observação</label>
+                <input value={carteiraForm.observacao}
+                  onChange={e => setCarteiraForm(f => ({ ...f, observacao: e.target.value }))}
+                  placeholder="Ex.: Devolução ao encarregado"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 bg-slate-50" />
+              </div>
+              {carteiraError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-xl text-xs">{carteiraError}</div>
+              )}
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setShowLevantamento(false)}
+                  className="flex-1 border border-slate-200 text-slate-600 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={carteiraSaving || parseFloat(String(carteiraForm.valor).replace(",", ".")) > saldoCarteiraSrv}
+                  className="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-2.5 rounded-xl text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed transition-colors">
+                  {carteiraSaving ? "A levantar..." : "Levantar"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* ─── Modal: Verificar dados académicos (Golfinho) ─── */}

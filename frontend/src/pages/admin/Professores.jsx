@@ -120,10 +120,14 @@ export default function Professores() {
                 </div>
               )}
               <div className="mt-3 pt-3 border-t border-slate-100">
-                <Link to={`/professores/${p.id}`}
-                  className="text-sm text-blue-600 hover:text-blue-800 hover:underline font-medium">
-                  Ver detalhes →
-                </Link>
+                {p.id ? (
+                  <Link to={`/professores/${p.id}`}
+                    className="text-sm text-blue-600 hover:text-blue-800 hover:underline font-medium">
+                    Ver detalhes →
+                  </Link>
+                ) : (
+                  <span className="text-sm text-slate-400 italic">Sem ID — registo inválido</span>
+                )}
               </div>
             </div>
           ))}

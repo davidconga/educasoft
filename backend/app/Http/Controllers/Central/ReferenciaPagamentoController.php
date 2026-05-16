@@ -87,7 +87,7 @@ class ReferenciaPagamentoController extends Controller {
                "Plano: " . ucfirst($escola->plano) . "\n" .
                "Factura: {$factura->numero}\n" .
                "Total: " . number_format((float) $factura->total, 2, ",", ".") . " AOA\n\n" .
-               "Activa em: " . rtrim(env("SUPER_ADMIN_URL", "https://app.educaja.com/super-admin"), "/") . "/escolas";
+               "Activa em: " . rtrim(env("SUPER_ADMIN_URL", "https://educaja.ao/super-admin"), "/") . "/escolas";
         try {
             WhatsappGateway::fromEnv()->enviar($numero, $msg, "primeiro_pagamento", (string) $escola->id);
         } catch (\Throwable $e) {

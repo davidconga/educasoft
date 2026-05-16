@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Plus, Download } from "lucide-react";
 import api from "../../../services/api";
 
-const fmt = (v) => Number(v || 0).toLocaleString("pt-AO");
+const fmt = (v) => Number(v || 0).toLocaleString("pt-PT");
 const meses = ["", "Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const ESTADO = {
   rascunho:  { cls: "bg-slate-100 text-slate-600",     l: "Rascunho" },

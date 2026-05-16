@@ -33,7 +33,7 @@
         </tr>
         <tr>
           <td style="background:#f8fafc;padding:14px 24px;border-top:1px solid #e2e8f0;font-size:11px;color:#94a3b8;text-align:center;">
-            Recebido em {{ now()->format('d/m/Y H:i') }} via educaja.com
+            Recebido em {{ now()->format('d/m/Y H:i') }} via educaja.ao
           </td>
         </tr>
       </table>

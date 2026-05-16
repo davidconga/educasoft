@@ -17,7 +17,7 @@ A Educajá ("nós", "Plataforma") fornece um sistema de gestão escolar SaaS (So
 
 ## 2. Adesão e Activação
 
-2.1. A adesão à Plataforma faz-se pela inscrição online em educaja.com, com escolha de um plano e pagamento da primeira mensalidade quando aplicável.
+2.1. A adesão à Plataforma faz-se pela inscrição online em educaja.ao, com escolha de um plano e pagamento da primeira mensalidade quando aplicável.
 
 2.2. A conta da Escola fica activa após confirmação do pagamento e provisionamento técnico pela equipa Educajá. Para planos com período de teste, a activação ocorre logo após o registo.
 
@@ -25,7 +25,7 @@ A Educajá ("nós", "Plataforma") fornece um sistema de gestão escolar SaaS (So
 
 ## 3. Planos, Preços e Pagamento
 
-3.1. Os preços, limites e funcionalidades de cada plano estão publicados em educaja.com/precos e podem ser actualizados a qualquer momento. Alterações de preço só entram em vigor no ciclo de facturação seguinte ao da comunicação.
+3.1. Os preços, limites e funcionalidades de cada plano estão publicados em educaja.ao/precos e podem ser actualizados a qualquer momento. Alterações de preço só entram em vigor no ciclo de facturação seguinte ao da comunicação.
 
 3.2. As facturas são emitidas mensalmente, com vencimento no dia configurado pela Escola (por defeito, dia 5 de cada mês).
 
@@ -79,7 +79,7 @@ A Educajá ("nós", "Plataforma") fornece um sistema de gestão escolar SaaS (So
 
 ## 10. Alterações aos Termos
 
-10.1. Estes Termos podem ser alterados pela Educajá. A versão em vigor estará sempre publicada em educaja.com/termos e identificada por número de versão.
+10.1. Estes Termos podem ser alterados pela Educajá. A versão em vigor estará sempre publicada em educaja.ao/termos e identificada por número de versão.
 
 10.2. Alterações materiais serão comunicadas ao Cliente por email com 30 dias de antecedência. A continuação do uso da Plataforma após a entrada em vigor das alterações implica aceitação tácita.
 
@@ -91,7 +91,7 @@ A Educajá ("nós", "Plataforma") fornece um sistema de gestão escolar SaaS (So
 
 ## 12. Contactos
 
-Para questões sobre estes Termos, contacte-nos em **contact@educaja.com** ou pelos meios disponíveis em educaja.com/contacto.
+Para questões sobre estes Termos, contacte-nos em **contact@educaja.ao** ou pelos meios disponíveis em educaja.ao/contacto.
 
 ---
 

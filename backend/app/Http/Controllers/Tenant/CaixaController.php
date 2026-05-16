@@ -63,9 +63,35 @@ class CaixaController extends Controller {
         ]);
     }
 
+    /**
+     * Encerra automaticamente sessões abertas há mais de 24 horas.
+     * Usa o total_esperado calculado como total_contado para evitar diferença pendente.
+     */
+    private static function fecharSessoesExpiradas(?int $operadorId = null): int {
+        $limite = Carbon::now()->subHours(24);
+        $q = CaixaSessao::where("status", "aberta")->where("abriu_em", "<", $limite);
+        if ($operadorId !== null) $q->where("operador_id", $operadorId);
+        $afetadas = 0;
+        foreach ($q->get() as $s) {
+            $esperado = $s->totalEsperadoCalculado();
+            $obsExtra = "[Encerramento automático: sessão excedeu 24h]";
+            $s->update([
+                "total_contado"     => $esperado,
+                "total_esperado"    => $esperado,
+                "diferenca"         => 0,
+                "observacoes_fecho" => trim(($s->observacoes_fecho ? $s->observacoes_fecho . " · " : "") . $obsExtra),
+                "fechou_em"         => Carbon::now(),
+                "status"            => "fechada",
+            ]);
+            $afetadas++;
+        }
+        return $afetadas;
+    }
+
     /** Sessão activa do operador autenticado (ou null). */
     public function actual(Request $request) {
         $user = $request->attributes->get("auth_user");
+        if ($user) self::fecharSessoesExpiradas($user->id);
         $sessao = CaixaSessao::where("operador_id", $user?->id)
             ->where("status", "aberta")
             ->latest("abriu_em")
@@ -80,7 +106,10 @@ class CaixaController extends Controller {
         $user = $request->attributes->get("auth_user");
         if (!$user) return response()->json(["message" => "Não autenticado."], 401);
 
-        // Bloqueia abertura se o operador já tem sessão aberta
+        // Encerra sessões antigas (>24h) automaticamente antes de abrir nova
+        self::fecharSessoesExpiradas($user->id);
+
+        // Bloqueia abertura se o operador já tem sessão aberta (válida, <24h)
         $existente = CaixaSessao::where("operador_id", $user->id)->where("status", "aberta")->first();
         if ($existente) {
             return response()->json([
@@ -218,22 +247,41 @@ class CaixaController extends Controller {
      */
     public static function registarPagamentoNaSessao(Pagamento $pagamento, $user): ?CaixaMovimento {
         if (!$user || !$pagamento || $pagamento->status !== "pago") return null;
+        // Auto-fecha sessões expiradas (>24h) antes de procurar a activa
+        self::fecharSessoesExpiradas($user->id);
         $sessao = CaixaSessao::where("operador_id", $user->id)->where("status", "aberta")->latest("abriu_em")->first();
         if (!$sessao) return null;
 
-        $valorPago = (float) $pagamento->valor + (float) ($pagamento->multa_valor ?? 0) - (float) ($pagamento->bolsa_valor ?? 0);
-        if ($valorPago <= 0) return null;
+        // Pagamento de propina liquidado pelo saldo em carteira → não há movimento real de caixa.
+        if ($pagamento->metodo === "carteira" && !in_array($pagamento->tipo, ["deposito","levantamento"], true)) {
+            $pagamento->update(["caixa_sessao_id" => $sessao->id]);
+            return null;
+        }
 
-        return DB::transaction(function () use ($pagamento, $sessao, $user, $valorPago) {
+        // Mapeia tipo+sentido para movimentos de carteira; mantém compat. para o resto.
+        if ($pagamento->tipo === "deposito") {
+            $tipoMov = "deposito"; $sentido = 1;  $valorMov = (float) $pagamento->valor;
+            $desc    = "Depósito carteira " . ($pagamento->referencia ?? "DEP-" . $pagamento->id);
+        } elseif ($pagamento->tipo === "levantamento") {
+            $tipoMov = "levantamento"; $sentido = -1; $valorMov = (float) $pagamento->valor;
+            $desc    = "Levantamento carteira " . ($pagamento->referencia ?? "LEV-" . $pagamento->id);
+        } else {
+            $tipoMov = "pagamento"; $sentido = 1;
+            $valorMov = (float) $pagamento->valor + (float) ($pagamento->multa_valor ?? 0) - (float) ($pagamento->bolsa_valor ?? 0) - (float) ($pagamento->valor_carteira ?? 0);
+            $desc    = "Pagamento " . ($pagamento->referencia ?? "PAG-" . $pagamento->id);
+        }
+        if ($valorMov <= 0) return null;
+
+        return DB::transaction(function () use ($pagamento, $sessao, $user, $valorMov, $tipoMov, $sentido, $desc) {
             $pagamento->update(["caixa_sessao_id" => $sessao->id]);
             $mov = CaixaMovimento::create([
                 "sessao_id"     => $sessao->id,
                 "pagamento_id"  => $pagamento->id,
-                "tipo"          => "pagamento",
-                "sentido"       => 1,
-                "valor"         => round($valorPago, 2),
+                "tipo"          => $tipoMov,
+                "sentido"       => $sentido,
+                "valor"         => round($valorMov, 2),
                 "metodo"        => $pagamento->metodo,
-                "descricao"     => "Pagamento " . ($pagamento->referencia ?? "PAG-" . $pagamento->id),
+                "descricao"     => $desc,
                 "operador_id"   => $user->id,
                 "operador_nome" => $user->nome,
             ]);

@@ -38,7 +38,7 @@ export default function PortalFinancas() {
           <div key={s.label} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
             <p className="text-xs text-slate-400 mb-1">{s.label}</p>
             <p className={`text-2xl font-bold ${s.color}`}>
-              {s.raw ? s.value : `${Number(s.value).toLocaleString("pt-AO")} Kz`}
+              {s.raw ? s.value : `${Number(s.value).toLocaleString("pt-PT")} Kz`}
             </p>
           </div>
         ))}
@@ -66,7 +66,7 @@ export default function PortalFinancas() {
                     </td>
                     <td className="px-4 py-3 text-slate-500">{p.data_vencimento ?? "—"}</td>
                     <td className="px-4 py-3 text-right font-semibold text-slate-800">
-                      {Number(p.valor).toLocaleString("pt-AO")} Kz
+                      {Number(p.valor).toLocaleString("pt-PT")} Kz
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[p.status] ?? "bg-slate-100 text-slate-500"}`}>

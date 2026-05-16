@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Users, UserCheck, UserX, Cake, Building2, Briefcase, Banknote, Plus } from "lucide-react";
+import { Users, UserCheck, UserX, Cake, Building2, Briefcase, Banknote, Plus, BookOpen } from "lucide-react";
 import api from "../../../services/api";
 
-const fmt = (v) => Number(v || 0).toLocaleString("pt-AO");
+const fmt = (v) => Number(v || 0).toLocaleString("pt-PT");
 
 export default function RhDashboard() {
   const [data, setData]       = useState(null);
@@ -15,6 +15,21 @@ export default function RhDashboard() {
       .finally(() => setLoading(false));
   }, []);
 
+  const abrirGuia = async () => {
+    try {
+      const r = await api.get("/rh/guia-rapido.pdf", { responseType: "blob" });
+      const url = URL.createObjectURL(new Blob([r.data], { type: "application/pdf" }));
+      const w = window.open(url, "_blank");
+      if (!w) {
+        const a = document.createElement("a");
+        a.href = url; a.download = "guia-rapido-rh.pdf";
+        document.body.appendChild(a); a.click(); a.remove();
+      }
+    } catch (e) {
+      alert(e.response?.data?.message || "Falha ao abrir o guia.");
+    }
+  };
+
   if (loading) return <p className="text-slate-400 py-12 text-center">A carregar...</p>;
   if (!data)   return <p className="text-slate-400 py-12 text-center">Sem dados.</p>;
 
@@ -25,9 +40,15 @@ export default function RhDashboard() {
           <h1 className="text-2xl font-bold text-gray-800">👥 Recursos Humanos</h1>
           <p className="text-xs text-slate-500 mt-1">Visão geral do quadro de pessoal e folha de pagamentos.</p>
         </div>
-        <Link to="/rh/funcionarios" className="bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 inline-flex items-center gap-2">
-          <Plus size={16}/> Novo funcionário
-        </Link>
+        <div className="flex items-center gap-2">
+          <button onClick={abrirGuia}
+            className="border border-slate-200 text-slate-700 hover:bg-slate-50 px-3 py-2 rounded-lg text-sm font-medium inline-flex items-center gap-2">
+            <BookOpen size={16}/> Guia Rápido
+          </button>
+          <Link to="/rh/funcionarios" className="bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 inline-flex items-center gap-2">
+            <Plus size={16}/> Novo funcionário
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

@@ -88,7 +88,7 @@ class RegisterController extends Controller
         });
 
         $escola->domains()->create([
-            "domain" => strtolower($request->codigo) . ".educa.okulandisa.com",
+            "domain" => strtolower($request->codigo) . "." . env("TENANT_DOMAIN_SUFFIX", "educaja.ao"),
         ]);
 
         $assinaturaService->criarPara($escola, $plano);

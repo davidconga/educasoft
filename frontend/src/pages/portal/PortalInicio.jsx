@@ -149,7 +149,7 @@ export default function PortalInicio() {
                   <div key={p.id} className="flex items-center justify-between gap-2">
                     <span className="text-sm text-slate-700 truncate">{p.descricao ?? p.plano?.nome ?? p.emolumento?.nome ?? "Pagamento"}</span>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-sm font-semibold text-slate-800">{Number(p.valor).toLocaleString("pt-AO")} Kz</span>
+                      <span className="text-sm font-semibold text-slate-800">{Number(p.valor).toLocaleString("pt-PT")} Kz</span>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[p.status] ?? "bg-slate-100 text-slate-500"}`}>
                         {STATUS_LABEL[p.status] ?? p.status}
                       </span>

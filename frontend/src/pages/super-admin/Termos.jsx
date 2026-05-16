@@ -88,7 +88,7 @@ export default function SuperAdminTermos() {
       <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2"><ShieldCheck size={20} className="text-blue-600" /> Termos e Condições</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Gerir versões publicadas em educaja.com/termos. Os clientes aceitam a versão em vigor no acto do registo.</p>
+          <p className="text-sm text-gray-500 mt-0.5">Gerir versões publicadas em educaja.ao/termos. Os clientes aceitam a versão em vigor no acto do registo.</p>
         </div>
         <button onClick={abrirNovo}
           className="text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg flex items-center gap-2">
@@ -117,7 +117,7 @@ export default function SuperAdminTermos() {
                 <td className="px-5 py-3 font-mono font-semibold">{t.versao}</td>
                 <td className="px-5 py-3 text-gray-800">{t.titulo}</td>
                 <td className="px-5 py-3 text-xs text-gray-500">
-                  {t.publicado_em ? new Date(t.publicado_em).toLocaleString("pt-AO") : "—"}
+                  {t.publicado_em ? new Date(t.publicado_em).toLocaleString("pt-PT") : "—"}
                 </td>
                 <td className="px-5 py-3 text-center">
                   {t.publicado ? (

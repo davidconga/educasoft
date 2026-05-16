@@ -123,7 +123,7 @@ export default function PerfilAluno() {
               <div className="text-xs text-yellow-600 mt-0.5">Pendentes</div>
             </div>
             <div className="bg-red-50 rounded-xl p-3 text-center">
-              <div className="text-sm font-bold text-red-600">{Number(pagamentos?.valor_em_divida ?? 0).toLocaleString("pt-AO")} Kz</div>
+              <div className="text-sm font-bold text-red-600">{Number(pagamentos?.valor_em_divida ?? 0).toLocaleString("pt-PT")} Kz</div>
               <div className="text-xs text-red-500 mt-0.5">Em dívida</div>
             </div>
           </div>

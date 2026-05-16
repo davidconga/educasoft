@@ -67,7 +67,7 @@ export default function Upgrade() {
             <p className="text-sm text-slate-600 mb-5">
               Para aceder a esta funcionalidade, contacta a equipa Educajá — temos soluções à medida.
             </p>
-            <a href="https://educaja.com/contacto" target="_blank" rel="noreferrer"
+            <a href="https://educaja.ao/contacto" target="_blank" rel="noreferrer"
               className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg">
               Falar com a equipa <ArrowRight size={14} />
             </a>
@@ -106,7 +106,7 @@ export default function Upgrade() {
                     ))}
                   </ul>
 
-                  <a href="https://educaja.com/contacto" target="_blank" rel="noreferrer"
+                  <a href="https://educaja.ao/contacto" target="_blank" rel="noreferrer"
                     className={`mt-6 inline-flex items-center justify-center gap-2 w-full font-semibold px-4 py-2.5 rounded-xl
                       ${p.destaque ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-slate-100 hover:bg-slate-200 text-slate-800"}`}>
                     Falar com a equipa para upgrade <ArrowRight size={14} />

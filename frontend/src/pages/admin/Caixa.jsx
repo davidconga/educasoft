@@ -3,8 +3,8 @@ import { Wallet, Lock, Unlock, ArrowDownCircle, ArrowUpCircle, Receipt, FileText
 import api from "../../services/api";
 import { useAuthStore } from "../../store/auth";
 
-const fmt = (v) => Number(v || 0).toLocaleString("pt-AO") + " Kz";
-const fmtDate = (d) => d ? new Date(d).toLocaleString("pt-AO") : "—";
+const fmt = (v) => Number(v || 0).toLocaleString("pt-PT") + " Kz";
+const fmtDate = (d) => d ? new Date(d).toLocaleString("pt-PT") : "—";
 
 const TIPO_LABEL = {
   pagamento: { label: "Pagamento", cor: "text-emerald-700 bg-emerald-50" },

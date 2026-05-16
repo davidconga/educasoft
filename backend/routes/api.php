@@ -14,6 +14,7 @@ use App\Http\Controllers\Central\PlanoController;
 use App\Http\Controllers\Central\AssinaturaController;
 use App\Http\Controllers\Central\TermoController;
 use App\Http\Controllers\Central\VendusController;
+use App\Http\Controllers\Central\IntelizeController;
 use App\Http\Controllers\Central\PublicVerificationController as CentralPublicVerificationController;
 
 Route::prefix("v1")->group(function () {
@@ -101,6 +102,11 @@ Route::prefix("v1")->group(function () {
         // Super-admin: integração Vendus (creds globais do operador)
         Route::get("integracoes/vendus", [VendusController::class, "show"]);
         Route::post("integracoes/vendus/test", [VendusController::class, "testar"]);
+
+        // Super-admin: integração Intelize (gateway de referências Multicaixa)
+        Route::get("integracoes/intelize", [IntelizeController::class, "show"]);
+        Route::patch("integracoes/intelize", [IntelizeController::class, "update"]);
+        Route::post("integracoes/intelize/test", [IntelizeController::class, "testar"]);
 
         // Super-admin: termos e condições
         Route::get("termos", [TermoController::class, "index"]);

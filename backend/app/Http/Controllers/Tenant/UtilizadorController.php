@@ -14,7 +14,8 @@ class UtilizadorController extends Controller {
         "director" => [
             "dashboard","chat","comunidade",
             "alunos","matriculas","professores","turmas","notas","presencas","horarios","cartao_estudante","folha_prova",
-            "pos","caixa","pagamentos","tesouraria","controlo_propinas","controlo_emolumentos","carteira_aluno",
+            "rh",
+            "pos","caixa","pagamentos","tesouraria","controlo_propinas","controlo_emolumentos","carteira_aluno","carteira_depositar","carteira_levantar",
             "relatorio_diario","relatorio_financeiro","precario","bolsas","lembretes",
             "configuracoes","integracao_vendus","configuracao_impressao",
         ],
@@ -28,7 +29,7 @@ class UtilizadorController extends Controller {
 
         "tesouraria" => [
             "dashboard","alunos",
-            "pos","caixa","pagamentos","tesouraria","controlo_propinas","controlo_emolumentos","carteira_aluno",
+            "pos","caixa","pagamentos","tesouraria","controlo_propinas","controlo_emolumentos","carteira_aluno","carteira_depositar","carteira_levantar",
             "relatorio_diario","relatorio_financeiro","precario","bolsas","lembretes",
             "configuracao_impressao","integracao_vendus",
         ],

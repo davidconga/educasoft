@@ -139,7 +139,7 @@ export default function Precos() {
                     </ul>
 
                     <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap gap-3 text-xs text-slate-500">
-                      <span><strong className="text-slate-700">{p.max_alunos === -1 ? "Ilimitados" : `Até ${p.max_alunos.toLocaleString("pt-AO")}`}</strong> alunos</span>
+                      <span><strong className="text-slate-700">{p.max_alunos === -1 ? "Ilimitados" : `Até ${p.max_alunos.toLocaleString("pt-PT")}`}</strong> alunos</span>
                     </div>
                   </div>
                 </div>

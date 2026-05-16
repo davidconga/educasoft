@@ -3,7 +3,7 @@ import { FileText, Printer, TrendingUp, Banknote, CreditCard, RefreshCw } from "
 import api from "../../services/api";
 import { useAuthStore } from "../../store/auth";
 
-const fmt = (v) => Number(v || 0).toLocaleString("pt-AO") + " Kz";
+const fmt = (v) => Number(v || 0).toLocaleString("pt-PT") + " Kz";
 
 const TIPO_LABEL  = { mensalidade:"Propina", emolumento:"Emolumento", matricula:"Matrícula", outro:"Outro" };
 const METODO_LABEL= { dinheiro:"Dinheiro", transferencia:"Transferência", multicaixa:"Multicaixa" };
@@ -34,15 +34,15 @@ function imprimirRelatorio(relatorio, escola) {
       <td>${TIPO_LABEL[p.tipo] || p.tipo}</td>
       <td>${p.mes_referencia || "—"}</td>
       <td>${METODO_LABEL[p.metodo] || p.metodo || "—"}</td>
-      <td class="right">${Number(p.valor).toLocaleString("pt-AO")} Kz</td>
+      <td class="right">${Number(p.valor).toLocaleString("pt-PT")} Kz</td>
     </tr>`).join("");
 
   const porMetodo = Object.entries(relatorio.por_metodo || {}).map(([m, v]) =>
-    `<div class="tag">${METODO_LABEL[m]||m}: <strong>${Number(v.total).toLocaleString("pt-AO")} Kz</strong> (${v.count})</div>`
+    `<div class="tag">${METODO_LABEL[m]||m}: <strong>${Number(v.total).toLocaleString("pt-PT")} Kz</strong> (${v.count})</div>`
   ).join("");
 
   const porTipo = Object.entries(relatorio.por_tipo || {}).map(([t, v]) =>
-    `<div class="tag">${TIPO_LABEL[t]||t}: <strong>${Number(v.total).toLocaleString("pt-AO")} Kz</strong> (${v.count})</div>`
+    `<div class="tag">${TIPO_LABEL[t]||t}: <strong>${Number(v.total).toLocaleString("pt-PT")} Kz</strong> (${v.count})</div>`
   ).join("");
 
   const html = `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"/>
@@ -97,7 +97,7 @@ tfoot td{border-top:2px solid #e2e8f0;padding:10px;font-weight:700;}
   <div class="meta">
     <div class="meta-card">
       <div class="label">Total Recebido</div>
-      <div class="value">${Number(relatorio.total).toLocaleString("pt-AO")} Kz</div>
+      <div class="value">${Number(relatorio.total).toLocaleString("pt-PT")} Kz</div>
       <div class="sub">${relatorio.count} recibo(s) emitido(s)</div>
     </div>
   </div>
@@ -116,7 +116,7 @@ tfoot td{border-top:2px solid #e2e8f0;padding:10px;font-weight:700;}
     <tbody>${linhas || `<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:16px;">Nenhum pagamento registado nesta data.</td></tr>`}</tbody>
     <tfoot><tr>
       <td colspan="6" class="tf-label">TOTAL GERAL</td>
-      <td class="tf-value">${Number(relatorio.total).toLocaleString("pt-AO")} Kz</td>
+      <td class="tf-value">${Number(relatorio.total).toLocaleString("pt-PT")} Kz</td>
     </tr></tfoot>
   </table>
 

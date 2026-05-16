@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Search, Plus, X, Filter, GraduationCap } from "lucide-react";
 import api from "../../../services/api";
 
-const fmt = (v) => Number(v || 0).toLocaleString("pt-AO");
+const fmt = (v) => Number(v || 0).toLocaleString("pt-PT");
 
 const ESTADOS = [
   { v: "activo",    cls: "bg-emerald-100 text-emerald-700", l: "Activo" },

@@ -1,6 +1,9 @@
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuthStore } from "./store/auth";
 import { useCentralAuth } from "./store/centralAuth";
+import { getBranding } from "./hooks/useBranding";
+import { useTheme } from "./hooks/useTheme";
 import Layout from "./components/layout/Layout";
 import Login from "./pages/auth/Login";
 import CadastroEscola from "./pages/auth/CadastroEscola";
@@ -19,6 +22,7 @@ import SuperAdminPlanos from "./pages/super-admin/Planos";
 import SuperAdminAssinaturas from "./pages/super-admin/Assinaturas";
 import SuperAdminTermos from "./pages/super-admin/Termos";
 import SuperAdminVendus from "./pages/super-admin/Vendus";
+import SuperAdminIntelize from "./pages/super-admin/Intelize";
 import Dashboard from "./pages/admin/Dashboard";
 import Alunos from "./pages/admin/Alunos";
 import Professores from "./pages/admin/Professores";
@@ -33,6 +37,7 @@ import RhFuncionarios from "./pages/admin/rh/Funcionarios";
 import RhFuncionarioDetalhe from "./pages/admin/rh/FuncionarioDetalhe";
 import RhFolhas from "./pages/admin/rh/Folhas";
 import RhFolhaDetalhe from "./pages/admin/rh/FolhaDetalhe";
+import RhPresencas from "./pages/admin/rh/Presencas";
 import AulasRemotas from "./pages/admin/AulasRemotas";
 import Tesouraria from "./pages/admin/Tesouraria";
 import Precario from "./pages/admin/Precario";
@@ -146,6 +151,7 @@ function AppRoutes() {
         <Route path="assinaturas" element={<SuperAdminAssinaturas />} />
         <Route path="termos" element={<SuperAdminTermos />} />
         <Route path="vendus" element={<SuperAdminVendus />} />
+        <Route path="intelize" element={<SuperAdminIntelize />} />
       </Route>
 
       {/* Perfil público do aluno (via QR) */}
@@ -170,7 +176,7 @@ function AppRoutes() {
       <Route path="/recuperar-senha" element={<ForgotPassword />} />
       <Route path="/recuperar-senha/confirmar" element={<ResetPassword />} />
       <Route path="/auth/sso" element={<SsoLogin />} />
-      {/* Site público (educaja.com) */}
+      {/* Site público (educaja.ao) */}
       <Route element={<SiteLayout />}>
         <Route path="/"                element={<Home />} />
         <Route path="/funcionalidades" element={<Funcionalidades />} />
@@ -230,6 +236,7 @@ function AppRoutes() {
       <Route path="/rh/funcionarios/:id" element={<ProtectedRoute><Layout><RhFuncionarioDetalhe /></Layout></ProtectedRoute>} />
       <Route path="/rh/folhas" element={<ProtectedRoute><Layout><RhFolhas /></Layout></ProtectedRoute>} />
       <Route path="/rh/folhas/:id" element={<ProtectedRoute><Layout><RhFolhaDetalhe /></Layout></ProtectedRoute>} />
+      <Route path="/rh/presencas" element={<ProtectedRoute><Layout><RhPresencas /></Layout></ProtectedRoute>} />
       <Route path="/upgrade" element={<ProtectedRoute><Upgrade /></ProtectedRoute>} />
       <Route path="/aulas-remotas" element={<ProtectedRoute><RequiresFeature feature="aulas_remotas"><Layout><AulasRemotas /></Layout></RequiresFeature></ProtectedRoute>} />
       <Route path="/tesouraria" element={<ProtectedRoute><RequiresFeature feature="tesouraria"><Layout><Tesouraria /></Layout></RequiresFeature></ProtectedRoute>} />
@@ -260,6 +267,24 @@ function AppRoutes() {
   );
 }
 
+function applyBranding() {
+  const b = getBranding();
+  if (b.title) document.title = b.title;
+  if (b.favicon) {
+    let link = document.querySelector("link[rel='icon']");
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      document.head.appendChild(link);
+    }
+    link.type = b.favicon.endsWith(".svg") ? "image/svg+xml" : "image/png";
+    link.href = b.favicon;
+  }
+}
+
 export default function App() {
+  useEffect(() => { applyBranding(); }, []);
+  // Inicializa o tema (light / dark / system) — escreve a classe `dark` no <html>
+  useTheme();
   return <BrowserRouter><AppRoutes /></BrowserRouter>;
 }

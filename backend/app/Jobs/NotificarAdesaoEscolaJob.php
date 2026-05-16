@@ -54,7 +54,7 @@ class NotificarAdesaoEscolaJob implements ShouldQueue {
                "A nossa equipa irá rever e activar o vosso acesso em breve.\n\n" .
                "Plano escolhido: " . ucfirst($e->plano) . "\n" .
                "Código: {$e->codigo}\n\n" .
-               "Para qualquer dúvida, responda a esta mensagem ou escreva para contact@educaja.com.\n\n" .
+               "Para qualquer dúvida, responda a esta mensagem ou escreva para contact@educaja.ao.\n\n" .
                "Equipa Educajá";
     }
 
@@ -66,7 +66,7 @@ class NotificarAdesaoEscolaJob implements ShouldQueue {
                "Email: {$e->email}\n" .
                "Telefone: " . ($e->telefone ?: "—") . "\n" .
                "Admin: {$e->admin_nome} <{$e->admin_email}>\n\n" .
-               "Activar em: " . rtrim(env("SUPER_ADMIN_URL", "https://app.educaja.com/super-admin"), "/") . "/escolas";
+               "Activar em: " . rtrim(env("SUPER_ADMIN_URL", "https://educaja.ao/super-admin"), "/") . "/escolas";
     }
 
     private function normalizar(string $numero): string {

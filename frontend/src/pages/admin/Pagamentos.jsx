@@ -258,11 +258,11 @@ export default function Pagamentos() {
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-green-50 border border-green-200 rounded-xl p-5">
           <p className="text-sm text-green-600">Total Pago</p>
-          <p className="text-2xl font-bold text-green-700">{Number(stats.total_pago||0).toLocaleString("pt-AO")} Kz</p>
+          <p className="text-2xl font-bold text-green-700">{Number(stats.total_pago||0).toLocaleString("pt-PT")} Kz</p>
         </div>
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-5">
           <p className="text-sm text-yellow-600">Total Pendente</p>
-          <p className="text-2xl font-bold text-yellow-700">{Number(stats.total_pendente||0).toLocaleString("pt-AO")} Kz</p>
+          <p className="text-2xl font-bold text-yellow-700">{Number(stats.total_pendente||0).toLocaleString("pt-PT")} Kz</p>
         </div>
         <div className="bg-red-50 border border-red-200 rounded-xl p-5">
           <p className="text-sm text-red-600">Alunos Inadimplentes</p>
@@ -433,7 +433,7 @@ export default function Pagamentos() {
                   <td className="px-6 py-4 text-sm text-gray-500">
                     {p.data_pagamento ? new Date(p.data_pagamento).toLocaleDateString("pt-AO") : "—"}
                   </td>
-                  <td className="px-6 py-4 text-sm font-semibold text-right">{Number(p.valor).toLocaleString("pt-AO")} Kz</td>
+                  <td className="px-6 py-4 text-sm font-semibold text-right">{Number(p.valor).toLocaleString("pt-PT")} Kz</td>
                   <td className="px-6 py-4 text-center">
                     <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColor[p.status]}`}>{p.status}</span>
                   </td>
@@ -535,7 +535,7 @@ export default function Pagamentos() {
               <div className="bg-slate-50 rounded-xl p-4 text-sm space-y-1">
                 <p><span className="text-slate-500">Aluno:</span> <strong>{confirmTarget.aluno?.user?.nome}</strong></p>
                 <p><span className="text-slate-500">Referência:</span> <span className="font-mono">{confirmTarget.referencia}</span></p>
-                <p><span className="text-slate-500">Valor:</span> <strong>{Number(confirmTarget.valor).toLocaleString("pt-AO")} Kz</strong></p>
+                <p><span className="text-slate-500">Valor:</span> <strong>{Number(confirmTarget.valor).toLocaleString("pt-PT")} Kz</strong></p>
               </div>
             </div>
             <form onSubmit={handleConfirmar} className="p-6 space-y-4">
@@ -587,7 +587,7 @@ export default function Pagamentos() {
                 <input type="date" required value={bulkForm.data_pagamento} onChange={e => setBulkForm({...bulkForm, data_pagamento: e.target.value})} className="w-full border rounded-lg px-3 py-2" />
               </div>
               <p className="text-sm text-gray-500">
-                Total: <strong>{pagamentos.filter(p => selected.includes(p.id)).reduce((s,p) => s+p.valor, 0).toLocaleString("pt-AO")} Kz</strong>
+                Total: <strong>{pagamentos.filter(p => selected.includes(p.id)).reduce((s,p) => s+p.valor, 0).toLocaleString("pt-PT")} Kz</strong>
               </p>
               <p className="text-xs text-slate-500 flex items-center gap-1.5">
                 <Printer size={12} /> Os recibos serão gerados automaticamente após confirmação.
@@ -637,7 +637,7 @@ export default function Pagamentos() {
                   placeholder="Ex: Importado do Golfinho legado" />
               </div>
               <p className="text-sm text-gray-500">
-                Total: <strong>{pagamentos.filter(p => selected.includes(p.id)).reduce((s,p) => s+Number(p.valor||0), 0).toLocaleString("pt-AO")} Kz</strong>
+                Total: <strong>{pagamentos.filter(p => selected.includes(p.id)).reduce((s,p) => s+Number(p.valor||0), 0).toLocaleString("pt-PT")} Kz</strong>
               </p>
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => setShowBulkHist(false)} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg">Cancelar</button>
@@ -662,7 +662,7 @@ export default function Pagamentos() {
               <div className="bg-purple-50 rounded-xl p-4 text-sm space-y-1 border border-purple-100">
                 <p><span className="text-slate-500">Aluno:</span> <strong>{estornoTarget.aluno?.user?.nome}</strong></p>
                 <p><span className="text-slate-500">Referência:</span> <span className="font-mono">{estornoTarget.referencia}</span></p>
-                <p><span className="text-slate-500">Valor:</span> <strong>{Number(estornoTarget.valor).toLocaleString("pt-AO")} Kz</strong></p>
+                <p><span className="text-slate-500">Valor:</span> <strong>{Number(estornoTarget.valor).toLocaleString("pt-PT")} Kz</strong></p>
               </div>
               <p className="text-xs text-amber-600 mt-3 bg-amber-50 rounded-lg p-2 border border-amber-100">
                 ⚠️ O pagamento voltará ao estado <strong>estornado</strong>. Esta acção fica registada.
@@ -702,7 +702,7 @@ export default function Pagamentos() {
               <div className="bg-rose-50 rounded-xl p-4 text-sm space-y-1 border border-rose-100">
                 <p><span className="text-slate-500">Aluno:</span> <strong>{ncTarget.aluno?.user?.nome}</strong></p>
                 <p><span className="text-slate-500">Factura Vendus:</span> <span className="font-mono">{ncTarget.vendus_numero}</span></p>
-                <p><span className="text-slate-500">Valor:</span> <strong>{Number(ncTarget.valor).toLocaleString("pt-AO")} Kz</strong></p>
+                <p><span className="text-slate-500">Valor:</span> <strong>{Number(ncTarget.valor).toLocaleString("pt-PT")} Kz</strong></p>
               </div>
               <p className="text-xs text-amber-700 mt-3 bg-amber-50 rounded-lg p-2 border border-amber-100">
                 ⚠️ Esta acção emite uma <strong>Nota de Crédito fiscal</strong> no Vendus, creditando a factura acima. É <strong>irreversível</strong>.

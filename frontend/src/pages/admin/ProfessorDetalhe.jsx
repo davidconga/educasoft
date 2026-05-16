@@ -167,6 +167,11 @@ export default function ProfessorDetalhe() {
   const [error,    setError]   = useState(null);
 
   useEffect(() => {
+    if (!id || id === "undefined" || id === "null") {
+      setError("ID de professor inválido na URL.");
+      setLoading(false);
+      return;
+    }
     api.get(`/professores/${id}`)
       .then(r => setProf(r.data))
       .catch(() => setError("Professor não encontrado."))

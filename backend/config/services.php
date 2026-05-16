@@ -45,4 +45,23 @@ return [
         'verify_ssl' => (bool) env('VENDUS_VERIFY_SSL', true),
     ],
 
+    'referencias' => [
+        'driver'         => env('REF_GATEWAY_DRIVER', ''),
+        'entidade'       => env('REF_ENTIDADE', '11111'),
+        'validade_dias'  => (int) env('REF_VALIDADE_DIAS', 30),
+        'webhook_secret' => env('REF_WEBHOOK_SECRET', ''),
+    ],
+
+    'intelize' => [
+        'base_url'         => env('INTELIZE_BASE_URL', 'https://demo.api.intelize.digital/v1'),
+        'username'         => env('INTELIZE_USERNAME'),
+        'password'         => env('INTELIZE_PASSWORD'),
+        'entidade'         => env('INTELIZE_ENTIDADE'),
+        'criador'          => env('INTELIZE_CRIADOR'),
+        'auth_path'        => env('INTELIZE_AUTH_PATH', '/auth'),
+        'references_path'  => env('INTELIZE_REFERENCES_PATH', '/references'),
+        'validade_dias'    => (int) env('INTELIZE_VALIDADE_DIAS', 30),
+        'token_ttl_min'    => (int) env('INTELIZE_TOKEN_TTL_MIN', 50),
+    ],
+
 ];

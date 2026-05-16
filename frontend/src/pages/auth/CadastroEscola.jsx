@@ -219,7 +219,7 @@ export default function CadastroEscola() {
                           <span className="text-2xl font-extrabold text-gray-800">Grátis</span>
                         ) : (
                           <span className="text-2xl font-extrabold text-gray-800">
-                            {plano.preco.toLocaleString("pt-AO")} Kz
+                            {plano.preco.toLocaleString("pt-PT")} Kz
                             <span className="text-sm font-normal text-gray-500">/{plano.periodo}</span>
                           </span>
                         )}
@@ -293,7 +293,7 @@ export default function CadastroEscola() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Código da Escola *</label>
                   <div className="flex items-center">
                     <span className="bg-gray-100 border border-r-0 border-gray-300 rounded-l-xl px-3 py-2.5 text-sm text-gray-500 whitespace-nowrap">
-                      educa.okulandisa.com/
+                      educaja.ao/
                     </span>
                     <input
                       value={form.codigo}
@@ -391,7 +391,7 @@ export default function CadastroEscola() {
                     <div>
                       <p className="font-bold text-gray-800">{planoSelecionado?.nome}</p>
                       <p className="text-sm text-gray-500">
-                        {planoSelecionado?.preco === 0 ? "Grátis" : `${planoSelecionado?.preco?.toLocaleString("pt-AO")} Kz/mês`}
+                        {planoSelecionado?.preco === 0 ? "Grátis" : `${planoSelecionado?.preco?.toLocaleString("pt-PT")} Kz/mês`}
                       </p>
                     </div>
                   </div>
@@ -401,7 +401,7 @@ export default function CadastroEscola() {
                   <p className="font-medium text-gray-800">{form.nome}</p>
                   <p className="text-sm text-gray-500">{form.email}</p>
                   {form.telefone && <p className="text-sm text-gray-500">{form.telefone}</p>}
-                  <p className="text-xs text-blue-600 mt-1 font-mono">{form.codigo}.educa.okulandisa.com</p>
+                  <p className="text-xs text-blue-600 mt-1 font-mono">{form.codigo}.educaja.ao</p>
                 </div>
                 <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 md:col-span-2">
                   <h3 className="font-semibold text-gray-700 text-sm mb-3 uppercase tracking-wide">Administrador</h3>

@@ -290,7 +290,7 @@ export default function SuperAdminFacturas() {
                     </p>
                     {activo.vendus_numero && <p className="text-sm font-mono mt-1">{activo.vendus_numero}</p>}
                     {activo.vendus_emitido_em && (
-                      <p className="text-xs text-emerald-700">{new Date(activo.vendus_emitido_em).toLocaleString("pt-AO")}</p>
+                      <p className="text-xs text-emerald-700">{new Date(activo.vendus_emitido_em).toLocaleString("pt-PT")}</p>
                     )}
                     {activo.vendus_erro && !activo.vendus_document_id && (
                       <p className="text-xs text-red-700 mt-1">{activo.vendus_erro}</p>

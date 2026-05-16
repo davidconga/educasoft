@@ -339,7 +339,7 @@ function ResetVerificacaoAcademicaCard({ aluno, onReset }) {
   };
 
   const verificadoEm = aluno.dados_academicos_verificados_em
-    ? new Date(aluno.dados_academicos_verificados_em).toLocaleString("pt-AO")
+    ? new Date(aluno.dados_academicos_verificados_em).toLocaleString("pt-PT")
     : null;
 
   return (
@@ -566,7 +566,7 @@ export default function AlunoDetalhe() {
                     {[["Total Pago", pago, "text-emerald-600"], ["Em Dívida", divida, "text-red-600"], ["Nº Pag.", pags.length, "text-blue-600"]].map(([l,v,c], i) => (
                       <div key={l} className="bg-slate-50 rounded-xl p-4 text-center">
                         <p className="text-xs text-slate-400 mb-1">{l}</p>
-                        <p className={`text-lg font-bold ${c}`}>{i === 2 ? v : `${Number(v).toLocaleString("pt-AO")} Kz`}</p>
+                        <p className={`text-lg font-bold ${c}`}>{i === 2 ? v : `${Number(v).toLocaleString("pt-PT")} Kz`}</p>
                       </div>
                     ))}
                   </div>
@@ -602,7 +602,7 @@ export default function AlunoDetalhe() {
                             </td>
                             <td className="px-4 py-2.5 text-slate-500 hidden sm:table-cell">{p.data_vencimento ?? "—"}</td>
                             <td className="px-4 py-2.5 text-right font-semibold text-slate-800">
-                              {Number(p.valor).toLocaleString("pt-AO")} Kz
+                              {Number(p.valor).toLocaleString("pt-PT")} Kz
                             </td>
                             <td className="px-4 py-2.5 text-center">
                               <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_PAG[p.status] ?? "bg-slate-100 text-slate-500"}`}>

@@ -70,7 +70,7 @@ class EscolaController extends Controller {
     // ── Routes ─────────────────────────────────────────────────────────────────
 
     public function index() {
-        return response()->json(Escola::withCount("domains")->paginate(20));
+        return response()->json(Escola::with("domains")->withCount("domains")->paginate(20));
     }
 
     public function activate(Request $request, Escola $escola) {
@@ -125,7 +125,7 @@ class EscolaController extends Controller {
             ]);
         });
 
-        $escola->domains()->create(["domain" => strtolower($request->codigo) . ".educa.okulandisa.com"]);
+        $escola->domains()->create(["domain" => strtolower($request->codigo) . "." . env("TENANT_DOMAIN_SUFFIX", "educaja.ao")]);
 
         try {
             $this->provision($escola);
@@ -207,7 +207,7 @@ class EscolaController extends Controller {
                     'nome'  => $admin->nome,
                     'email' => $admin->email,
                 ],
-                'sso_url'    => "https://{$escola->codigo}.educa.okulandisa.com/auth/sso?"
+                'sso_url'    => "https://" . ($escola->domains->first()->domain ?? ($escola->codigo . "." . env("TENANT_DOMAIN_SUFFIX", "educaja.ao"))) . "/auth/sso?"
                     . http_build_query([
                         't'   => $token,
                         'tc'  => $escola->codigo,

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useCentralAuth } from "../../store/centralAuth";
-import { LayoutDashboard, School, MessageCircle, Inbox, LogOut, Settings, Users, Receipt, Layers, Repeat, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, School, MessageCircle, Inbox, LogOut, Settings, Users, Receipt, Layers, Repeat, ShieldCheck, CreditCard } from "lucide-react";
 
 const nav = [
   { to: "/super-admin",            label: "Dashboard",     Icon: LayoutDashboard, end: true },
@@ -15,6 +15,7 @@ const nav = [
   { to: "/super-admin/contactos",  label: "Contactos",      Icon: Inbox, badge: "contactos" },
   { to: "/super-admin/termos",     label: "Termos",         Icon: ShieldCheck },
   { to: "/super-admin/vendus",     label: "Integração Vendus", Icon: Receipt },
+  { to: "/super-admin/intelize",   label: "Intelize",       Icon: CreditCard },
 ];
 
 export default function SuperAdminLayout() {

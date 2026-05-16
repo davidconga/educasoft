@@ -33,8 +33,8 @@
     <div class="brand">EDUCAJÁ<br><span class="sub">Plataforma de Gestão Escolar</span></div>
     <div style="font-size: 10px; color: #64748b; margin-top: 8px; line-height: 1.5;">
       Benguela, Angola<br>
-      contact@educaja.com<br>
-      www.educaja.com
+      contact@educaja.ao<br>
+      www.educaja.ao
     </div>
   </div>
   <div class="meta">

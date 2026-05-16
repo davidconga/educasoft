@@ -42,6 +42,7 @@ class ReciboPdfController extends Controller {
                 "saldo"          => $totalPago - $totalPend,
                 "saldo_anterior" => $saldoAnterior,
                 "saldo_actual"   => $totalPago - $totalPend,
+                "saldo_carteira" => round(\App\Http\Controllers\Tenant\PagamentoController::computeSaldoCarteira((int)$alunoId), 2),
             ],
             "academico"  => [
                 "curso"  => $matricula?->turma?->classe?->curso?->nome,
@@ -87,6 +88,7 @@ class ReciboPdfController extends Controller {
             "saldo"          => $saldoActual,
             "saldo_anterior" => $saldoAnterior,
             "saldo_actual"   => $saldoActual,
+            "saldo_carteira" => round(\App\Http\Controllers\Tenant\PagamentoController::computeSaldoCarteira((int)$alunoId), 2),
         ];
 
         // Info académica (matrícula activa preferida, fallback para a mais recente)
