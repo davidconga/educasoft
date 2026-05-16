@@ -63,8 +63,9 @@ Route::prefix("api/tenant")->middleware([InitializeTenant::class, \Illuminate\Ro
         Route::get("dashboard", [DashboardController::class, "index"]);
 
         // ── Suporte à camada offline ──
-        Route::get("offline/manifest",   [OfflineController::class, "manifest"]);
-        Route::post("offline/telemetry", [OfflineController::class, "telemetry"]);
+        Route::get("offline/manifest",         [OfflineController::class, "manifest"]);
+        Route::get("offline/alunos-snapshot",  [OfflineController::class, "alunosSnapshot"]);
+        Route::post("offline/telemetry",       [OfflineController::class, "telemetry"]);
 
         Route::post("alunos/{aluno}/foto", [AlunoController::class, "uploadFoto"]);
         Route::patch("alunos/{aluno}/reset-senha", [AlunoController::class, "resetSenha"]);

@@ -71,6 +71,50 @@ class OfflineController extends Controller
     }
 
     /**
+     * Snapshot enxuto dos alunos para pesquisa local quando offline.
+     *
+     * Devolve apenas os campos necessários para a barra de pesquisa do POS
+     * (id, nome, numero_aluno, turma activa, foto). Sem dívidas — essas vêm
+     * via `/pos/alunos/{id}/dividas` por aluno (a app cacheia em IndexedDB
+     * à medida que o utilizador os visita online).
+     *
+     * Suporta paginação por `cursor` (id mínimo) para tenants grandes.
+     * Devolve `next_cursor` se houver mais — o cliente itera até esgotar.
+     */
+    public function alunosSnapshot(Request $request) {
+        $cursor = (int) $request->query("cursor", 0);
+        $limit  = min(1000, max(50, (int) $request->query("limit", 500)));
+
+        $rows = Aluno::with(["user:id,nome,email", "matriculas" => function ($q) {
+                $q->where("status", "activa")->with("turma:id,nome");
+            }])
+            ->where("id", ">", $cursor)
+            ->orderBy("id")
+            ->limit($limit + 1)
+            ->get();
+
+        $hasMore = $rows->count() > $limit;
+        if ($hasMore) $rows = $rows->take($limit);
+
+        $items = $rows->map(function ($a) {
+            return [
+                "id"           => $a->id,
+                "nome"         => $a->user?->nome,
+                "email"        => $a->user?->email,
+                "numero_aluno" => $a->numero_aluno,
+                "turma"        => $a->matriculas->firstWhere("status", "activa")?->turma?->nome,
+                "foto"         => $a->foto,
+            ];
+        });
+
+        return response()->json([
+            "items"        => $items,
+            "next_cursor"  => $hasMore ? $rows->last()->id : null,
+            "snapshot_at"  => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
      * Telemetria de uma sessão offline.
      *
      * Payload esperado:

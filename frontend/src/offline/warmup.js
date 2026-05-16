@@ -1,5 +1,6 @@
 import api from "../services/api";
 import { setMeta, getMeta } from "./db";
+import { syncAlunosSnapshot } from "./alunos";
 
 /**
  * Aquece a cache do service worker com leituras frequentemente usadas pelo
@@ -45,6 +46,12 @@ export async function warmupCache(userTipo) {
       console.debug("[Educajá] warm-up de cache concluído", { urls: lista.length });
     }
   });
+
+  // Snapshot de alunos para pesquisa local offline (apenas para utilizadores
+  // que efectivamente usam o POS / pesquisa de alunos).
+  if (userTipo === "admin") {
+    syncAlunosSnapshot();
+  }
 }
 
 export async function getLastManifest() {

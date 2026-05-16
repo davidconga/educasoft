@@ -9,6 +9,7 @@ import { useMeses } from "../../hooks/useMeses";
 import ModalVerificarAcademicos from "../../components/ModalVerificarAcademicos";
 import { enqueuePosCobranca, enqueueCriarPagamento } from "../../offline/pos";
 import { sendOrEnqueue } from "../../offline/sendOrEnqueue";
+import { searchAlunosLocal, getDividasLocal, cacheDividas } from "../../offline/alunos";
 
 const fmt = (v) => Number(v || 0).toLocaleString("pt-PT") + " Kz";
 
@@ -87,35 +88,83 @@ export default function Pos() {
     api.get("/precario/emolumentos").then(r => setEmolumentos(r.data || [])).catch(() => {});
   }, []);
 
-  // Procura aluno (debounced)
+  // Procura aluno (debounced). Online: API. Offline / falha de rede: cache IndexedDB.
   useEffect(() => {
     if (!query.trim()) { setResultados([]); return; }
     setPesquisando(true);
     const timer = setTimeout(async () => {
+      const useLocal = async () => {
+        try {
+          const locais = await searchAlunosLocal(query);
+          setResultados(locais);
+        } catch { setResultados([]); }
+      };
+      const isOffline = typeof navigator !== "undefined" && navigator.onLine === false;
+      if (isOffline) {
+        await useLocal();
+        setPesquisando(false);
+        return;
+      }
       try {
         const r = await api.get("/pos/alunos", { params: { q: query } });
         setResultados(r.data || []);
+      } catch (e) {
+        if (!e?.response) {
+          // falha de rede → tenta local
+          await useLocal();
+        } else {
+          setResultados([]);
+        }
       } finally { setPesquisando(false); }
     }, 250);
     return () => clearTimeout(timer);
   }, [query]);
 
+  const aplicarDividasPayload = (payload, { offline = false } = {}) => {
+    const al = payload.aluno;
+    setAluno(offline ? { ...al, _offline: true } : al);
+    setDividas(payload.dividas || []);
+    setTotalDevido(payload.total_devido || 0);
+    setSaldoCarteira(Number(payload.saldo_carteira || 0));
+    setLotesRecentes(payload.lotes_recentes || []);
+  };
+
   const escolherAluno = async (a) => {
     setQuery(""); setResultados([]); setSelected([]);
     setErro(null); setValorCarteira("");
+    const carregarLocal = async () => {
+      const cached = await getDividasLocal(a.id);
+      if (cached) {
+        aplicarDividasPayload(cached, { offline: true });
+        return true;
+      }
+      // Sem cache: monta um payload mínimo a partir do snapshot da pesquisa,
+      // para o operador poder pelo menos criar uma cobrança nova offline.
+      aplicarDividasPayload({
+        aluno: { id: a.id, nome: a.nome, numero_aluno: a.numero_aluno, foto: a.foto, user: { nome: a.nome }, matriculas: [] },
+        dividas: [],
+        total_devido: 0,
+        saldo_carteira: 0,
+        lotes_recentes: [],
+      }, { offline: true });
+      setErro("Aluno em modo offline sem dívidas cacheadas. Apenas é possível criar uma cobrança nova.");
+      return true;
+    };
+    const isOffline = typeof navigator !== "undefined" && navigator.onLine === false;
+    if (isOffline) { await carregarLocal(); return; }
     try {
       const r = await api.get(`/pos/alunos/${a.id}/dividas`);
-      const al = r.data.aluno;
-      setAluno(al);
-      setDividas(r.data.dividas || []);
-      setTotalDevido(r.data.total_devido || 0);
-      setSaldoCarteira(Number(r.data.saldo_carteira || 0));
-      setLotesRecentes(r.data.lotes_recentes || []);
-      if (escola?.permite_pago_historico && !al?.dados_academicos_verificados_em) {
+      aplicarDividasPayload(r.data);
+      cacheDividas(a.id, r.data); // best-effort, não bloqueia
+      if (escola?.permite_pago_historico && !r.data.aluno?.dados_academicos_verificados_em) {
         setShowVerifAcad(true);
       }
     } catch (e) {
-      setErro(e.response?.data?.message || "Erro a carregar dívidas.");
+      if (!e?.response) {
+        await carregarLocal();
+      } else {
+        setErro(e.response?.data?.message || "Erro a carregar dívidas.");
+      }
     }
   };
 
@@ -127,6 +176,7 @@ export default function Pos() {
       setTotalDevido(r.data.total_devido || 0);
       setSaldoCarteira(Number(r.data.saldo_carteira || 0));
       setLotesRecentes(r.data.lotes_recentes || []);
+      cacheDividas(aluno.id, r.data);
     } catch (_) { /* ignore */ }
   };
 
