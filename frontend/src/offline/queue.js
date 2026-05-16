@@ -3,6 +3,14 @@ import api from "../services/api";
 
 const ID_MAP_KEY = "outbox_id_map"; // { [localId]: realId }
 
+function genIdempotencyKey() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  // Fallback (RFC4122-ish) para ambientes sem crypto.randomUUID.
+  return "outbox-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+}
+
 async function getIdMap() {
   return (await getMeta(ID_MAP_KEY)) || {};
 }
@@ -70,6 +78,10 @@ export async function enqueue(entry) {
     data: entry.data ?? null,
     meta: entry.meta ?? null,
     label: entry.label ?? `${entry.method} ${entry.url}`,
+    // Idempotency-Key estável por entrada: re-tentativas do mesmo pedido reusam
+    // a mesma chave, mas duas operações distintas (mesmo que idênticas no payload)
+    // têm chaves diferentes.
+    idempotencyKey: entry.idempotencyKey ?? genIdempotencyKey(),
     status: "pending",
     attempts: 0,
     lastError: null,
@@ -164,6 +176,7 @@ async function attempt(entry) {
       method: entry.method,
       url: entry.url,
       data: entry.data,
+      headers: entry.idempotencyKey ? { "Idempotency-Key": entry.idempotencyKey } : undefined,
     });
     entry.status = "synced";
     entry.syncedAt = Date.now();

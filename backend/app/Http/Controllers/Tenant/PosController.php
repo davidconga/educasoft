@@ -224,6 +224,41 @@ class PosController extends Controller {
             : now()->toDateString();
         $loteOfflineRef = $data["offline_lote_ref"] ?? null;
 
+        // Dedupe defensivo: se já existe um lote com este `lote_offline_ref`,
+        // devolvemos esse — o cliente está a reenviar uma cobrança que já foi
+        // sincronizada (ex.: outbox replicada noutro dispositivo, retry após
+        // resposta perdida e expiração da chave de idempotência).
+        if ($loteOfflineRef) {
+            $existingLoteId = Pagamento::where("lote_offline_ref", $loteOfflineRef)
+                ->value("lote_id");
+            if ($existingLoteId) {
+                $pagamentos = Pagamento::where("lote_id", $existingLoteId)
+                    ->with(
+                        "aluno.user",
+                        "aluno.matriculas.turma.classe.curso",
+                        "aluno.matriculas.turma.turnoObj",
+                        "propina",
+                        "emolumento"
+                    )->get();
+                $alunoIdExist = (int) ($pagamentos->first()?->aluno_id ?? 0);
+                $saldoActualExist = $alunoIdExist
+                    ? round(PagamentoController::computeSaldoCarteira($alunoIdExist), 2)
+                    : 0;
+                return response()->json([
+                    "message"    => "Cobrança já sincronizada (dedupe offline).",
+                    "lote_id"    => $existingLoteId,
+                    "sessao"     => $sessao->fresh(),
+                    "pagamentos" => $pagamentos,
+                    "via_number" => 1,
+                    "deduped"    => true,
+                    "carteira"   => [
+                        "saldo_carteira"        => $saldoActualExist,
+                        "saldo_carteira_actual" => $saldoActualExist,
+                    ],
+                ]);
+            }
+        }
+
         $pendentes = Pagamento::whereIn("id", $data["ids"])
             ->whereIn("status", ["pendente", "vencido"])
             ->get();

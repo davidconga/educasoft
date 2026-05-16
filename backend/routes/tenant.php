@@ -45,6 +45,7 @@ use App\Http\Controllers\Tenant\PublicVerificationController;
 use App\Http\Controllers\Tenant\ChatController;
 use App\Http\Controllers\Tenant\ComunidadeController;
 use App\Http\Controllers\Tenant\LembreteController;
+use App\Http\Controllers\Tenant\OfflineController;
 
 Route::prefix("api/tenant")->middleware([InitializeTenant::class, \Illuminate\Routing\Middleware\SubstituteBindings::class])->group(function () {
     Route::post("auth/login", [AuthController::class, "login"]);
@@ -60,6 +61,11 @@ Route::prefix("api/tenant")->middleware([InitializeTenant::class, \Illuminate\Ro
         Route::post("auth/logout", [AuthController::class, "logout"]);
         Route::get("auth/me", [AuthController::class, "me"]);
         Route::get("dashboard", [DashboardController::class, "index"]);
+
+        // ── Suporte à camada offline ──
+        Route::get("offline/manifest",   [OfflineController::class, "manifest"]);
+        Route::post("offline/telemetry", [OfflineController::class, "telemetry"]);
+
         Route::post("alunos/{aluno}/foto", [AlunoController::class, "uploadFoto"]);
         Route::patch("alunos/{aluno}/reset-senha", [AlunoController::class, "resetSenha"]);
         Route::patch("alunos/{aluno}/definir-senha", [AlunoController::class, "definirSenha"]);
@@ -150,7 +156,7 @@ Route::prefix("api/tenant")->middleware([InitializeTenant::class, \Illuminate\Ro
         // === Tesouraria (plano standard+) ===
         Route::middleware("feature:tesouraria")->group(function () {
             Route::get("pagamentos", [PagamentoController::class, "index"]);
-            Route::post("pagamentos", [PagamentoController::class, "store"]);
+            Route::post("pagamentos", [PagamentoController::class, "store"])->middleware("idempotency");
             Route::get("pagamentos/relatorio",            [PagamentoController::class, "relatorio"]);
             Route::get("pagamentos/relatorio-diario",    [PagamentoController::class, "relatorioDiario"]);
             Route::get("pagamentos/relatorio-financeiro",[PagamentoController::class, "relatorioFinanceiro"]);
@@ -170,8 +176,8 @@ Route::prefix("api/tenant")->middleware([InitializeTenant::class, \Illuminate\Ro
             Route::post("pagamentos/{pagamento}/vendus/emitir", [PagamentoController::class, "emitirVendus"]);
             Route::post("pagamentos/{pagamento}/vendus/nota-credito", [PagamentoController::class, "emitirNotaCreditoVendus"]);
             Route::get("pagamentos/carteira/{alunoId}",                [PagamentoController::class, "carteira"]);
-            Route::post("pagamentos/carteira/{alunoId}/depositar",     [PagamentoController::class, "depositarCarteira"]);
-            Route::post("pagamentos/carteira/{alunoId}/levantar",      [PagamentoController::class, "levantarCarteira"]);
+            Route::post("pagamentos/carteira/{alunoId}/depositar",     [PagamentoController::class, "depositarCarteira"])->middleware("idempotency");
+            Route::post("pagamentos/carteira/{alunoId}/levantar",      [PagamentoController::class, "levantarCarteira"])->middleware("idempotency");
             Route::get("planos-pagamento", [PagamentoController::class, "planos"]);
             Route::post("planos-pagamento", [PagamentoController::class, "storePlano"]);
         });
@@ -230,7 +236,7 @@ Route::prefix("api/tenant")->middleware([InitializeTenant::class, \Illuminate\Ro
             Route::get("pos/alunos", [PosController::class, "pesquisarAlunos"]);
             Route::get("pos/alunos/{aluno}/dividas", [PosController::class, "dividasAluno"]);
             Route::get("pos/verificar-referencia", [PosController::class, "verificarReferencia"]);
-            Route::post("pos/cobrar", [PosController::class, "cobrar"]);
+            Route::post("pos/cobrar", [PosController::class, "cobrar"])->middleware("idempotency");
             Route::get("pos/recibo/{loteOrPag}", [PosController::class, "recibo"]);
         });
 

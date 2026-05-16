@@ -96,14 +96,42 @@ Depois, no Xcode:
 
 ---
 
+## Backend offline-first
+
+A camada offline do frontend é complementada por suporte explícito no backend:
+
+- **Idempotência por `Idempotency-Key`** — middleware
+  [`Idempotency`](backend/app/Http/Middleware/Idempotency.php) registado como
+  alias `idempotency` e aplicado em `POST /pos/cobrar`, `POST /pagamentos`,
+  `POST /pagamentos/carteira/{aluno}/depositar` e
+  `POST /pagamentos/carteira/{aluno}/levantar`. O frontend (outbox) envia uma
+  chave estável por entrada; re-tentativas após resposta perdida devolvem a
+  resposta original em vez de duplicar a operação. Chaves expiram em 7 dias.
+  Tabela tenant: `idempotency_keys` (migração
+  `2026_05_16_000002_create_idempotency_keys_table`).
+- **Dedupe defensivo por `lote_offline_ref`** — em `PosController::cobrar`, se
+  o `lote_offline_ref` enviado já existe num lote anterior, devolvemos esse
+  lote com `deduped: true` em vez de criar um duplicado. Funciona como segunda
+  rede de segurança caso a chave de idempotência já tenha expirado ou o
+  cliente perca o estado da outbox.
+- **`GET /offline/manifest`** — devolve `caixa_sessao` actual, marcadores de
+  versão (counts e `max(updated_at)` de alunos/preçário/configuração) e a
+  lista de URLs a pré-carregar no warm-up. O cliente consome no login via
+  `warmupCache()`.
+- **`POST /offline/telemetry`** — recebe `queued / synced / failed /
+  ms_until_first_sync / ms_total` por ciclo offline→online; o frontend envia
+  automaticamente via `installTelemetry()` quando a outbox volta a esvaziar.
+  Para já só vai para os logs; se vier a justificar análise estruturada,
+  fazemos uma tabela depois.
+
+> Deploy: correr `php artisan tenants:migrate` para criar
+> `idempotency_keys` em cada tenant.
+
 ## Próximos passos (roadmap offline-first)
 
-1. Migrar o **POS / `POST /pos/cobrar`** para `sendOrEnqueue()` com recibo
-   provisório (número sequencial local prefixado com `OFF-`) e re-emissão
-   quando sincronizar.
-2. Cache pró-activo de **alunos, preçário, sessão de caixa** (já vão pelo
-   `NetworkFirst`, mas falta um *pre-fetch* explícito ao login).
-3. Mecanismo de resolução de conflitos para entradas em `status=failed` (UI
-   para corrigir/substituir antes de re-enviar).
-4. Métricas: enviar para o backend a quantidade de operações queued + tempo até
-   sync (telemetria útil para escolas com internet intermitente).
+1. UI de resolução de conflitos para entradas em `status=failed` (corrigir
+   payload antes de re-enviar).
+2. Job recorrente para limpar `idempotency_keys` expiradas (cron `db:prune`
+   ou comando dedicado em todos os tenants).
+3. Estender idempotência a mais endpoints à medida que mais fluxos forem
+   suportados offline (lembretes manuais, comprovativos, etc).

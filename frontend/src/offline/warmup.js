@@ -1,13 +1,15 @@
 import api from "../services/api";
+import { setMeta, getMeta } from "./db";
 
 /**
  * Aquece a cache do service worker com leituras frequentemente usadas pelo
  * utilizador, logo após login. Fire-and-forget: se algum endpoint falhar,
  * apenas significa que essa leitura não ficará disponível offline desta vez.
  *
- * Mapa de leituras por tipo de utilizador.
+ * Lista de URLs vem do `/offline/manifest` (servidor decide, podemos ajustar
+ * sem redeploy do frontend); se o manifest falhar, cai para um default por tipo.
  */
-const WARMUP_POR_TIPO = {
+const WARMUP_FALLBACK_POR_TIPO = {
   admin: [
     "/dashboard",
     "/caixa/actual",
@@ -25,13 +27,26 @@ const WARMUP_POR_TIPO = {
   ],
 };
 
-export function warmupCache(userTipo) {
+export async function warmupCache(userTipo) {
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
-  const lista = WARMUP_POR_TIPO[userTipo] || WARMUP_POR_TIPO.admin;
-  // Dispara em paralelo, ignora erros — o objectivo é só popular a cache do SW.
+
+  let urls = null;
+  try {
+    const { data: manifest } = await api.get("/offline/manifest");
+    if (Array.isArray(manifest?.warmup_urls) && manifest.warmup_urls.length > 0) {
+      urls = manifest.warmup_urls;
+    }
+    await setMeta("last_manifest", { at: Date.now(), manifest });
+  } catch { /* manifest é best-effort */ }
+
+  const lista = urls || WARMUP_FALLBACK_POR_TIPO[userTipo] || WARMUP_FALLBACK_POR_TIPO.admin;
   Promise.allSettled(lista.map(url => api.get(url).catch(() => null))).then(() => {
     if (typeof console !== "undefined") {
       console.debug("[Educajá] warm-up de cache concluído", { urls: lista.length });
     }
   });
+}
+
+export async function getLastManifest() {
+  return getMeta("last_manifest");
 }
