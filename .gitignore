@@ -1,0 +1,37 @@
+# Dependências
+node_modules/
+vendor/
+
+# Builds — geram-se localmente, não vão para o repositório
+electron/dist/
+electron/out/
+frontend/dist/
+frontend/build/
+
+# Capacitor / mobile (gerados)
+frontend/android/
+frontend/ios/
+
+# Laravel local
+backend/.env
+backend/.env.local
+backend/storage/logs/*.log
+backend/storage/framework/cache/data/*
+backend/storage/framework/sessions/*
+backend/storage/framework/views/*
+backend/bootstrap/cache/*.php
+
+# Sistema operativo / editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Secrets / temporários
+*.local
+*.tmp
+.env
+.env.*
+!.env.example
