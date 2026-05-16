@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Wallet, Lock, Unlock, ArrowDownCircle, ArrowUpCircle, Receipt, FileText, Loader2, Plus, X, Printer, Filter, BarChart3 } from "lucide-react";
 import api from "../../services/api";
 import { useAuthStore } from "../../store/auth";
+import { sendOrEnqueue } from "../../offline/sendOrEnqueue";
 
 const fmt = (v) => Number(v || 0).toLocaleString("pt-PT") + " Kz";
 const fmtDate = (d) => d ? new Date(d).toLocaleString("pt-PT") : "—";
@@ -92,13 +93,23 @@ export default function Caixa() {
   const abrir = async () => {
     setAcaoLoading(true);
     try {
-      const r = await api.post("/caixa/abrir", {
+      const payload = {
         fundo_inicial: Number(formAbrir.fundo_inicial || 0),
         nome_caixa: formAbrir.nome_caixa || null,
         observacoes_abertura: formAbrir.observacoes_abertura || null,
+      };
+      const r = await sendOrEnqueue({
+        method: "POST",
+        url: "/caixa/abrir",
+        data: payload,
+        label: `Abrir caixa (${payload.nome_caixa || "sem nome"})`,
+        meta: { tipo: "caixa_abrir" },
       });
       setShowAbrir(false);
       setFormAbrir({ fundo_inicial: "", nome_caixa: "", observacoes_abertura: "" });
+      if (r.queued) {
+        flash("Sem rede: a abertura ficou na fila offline. A caixa será criada quando voltar a internet.", "ok");
+      }
       await carregar();
     } catch (e) {
       flash(e.response?.data?.message || "Falha ao abrir caixa.", "err");

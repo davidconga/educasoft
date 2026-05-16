@@ -224,7 +224,7 @@ Route::prefix("api/tenant")->middleware([InitializeTenant::class, \Illuminate\Ro
             Route::get("caixa", [CaixaController::class, "index"]);
             Route::get("caixa/actual", [CaixaController::class, "actual"]);
             Route::get("caixa/resumo", [CaixaController::class, "resumo"]);
-            Route::post("caixa/abrir", [CaixaController::class, "abrir"]);
+            Route::post("caixa/abrir", [CaixaController::class, "abrir"])->middleware("idempotency");
             Route::get("caixa/{sessao}", [CaixaController::class, "show"]);
             Route::get("caixa/{sessao}/fecho.pdf", [CaixaController::class, "pdfFecho"]);
             Route::post("caixa/{sessao}/fechar", [CaixaController::class, "fechar"]);

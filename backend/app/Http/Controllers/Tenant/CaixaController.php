@@ -109,9 +109,16 @@ class CaixaController extends Controller {
         // Encerra sessões antigas (>24h) automaticamente antes de abrir nova
         self::fecharSessoesExpiradas($user->id);
 
-        // Bloqueia abertura se o operador já tem sessão aberta (válida, <24h)
+        // Bloqueia abertura se o operador já tem sessão aberta (válida, <24h).
+        // Excepção: se o pedido vem da outbox offline (`Idempotency-Key` presente),
+        // devolvemos a sessão existente como sucesso — o utilizador "abriu" uma
+        // caixa enquanto sem rede, e na sincronização vimos que já havia uma
+        // (provavelmente cacheada e nunca fechada). Não faz sentido bloquear.
         $existente = CaixaSessao::where("operador_id", $user->id)->where("status", "aberta")->first();
         if ($existente) {
+            if ($request->header("Idempotency-Key")) {
+                return response()->json($existente, 200);
+            }
             return response()->json([
                 "message" => "Já tem uma sessão aberta. Feche-a antes de abrir outra.",
                 "sessao"  => $existente,

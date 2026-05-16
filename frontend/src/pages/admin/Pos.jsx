@@ -454,11 +454,39 @@ export default function Pos() {
   const abrirCaixaRapida = async () => {
     setAbrindo(true); setErro(null);
     try {
-      const r = await api.post("/caixa/abrir", {
+      const payload = {
         fundo_inicial: Number(abrirForm.fundo_inicial || 0),
         nome_caixa: abrirForm.nome_caixa || null,
+      };
+      const r = await sendOrEnqueue({
+        method: "POST",
+        url: "/caixa/abrir",
+        data: payload,
+        label: `Abrir caixa (${payload.nome_caixa || "rápida"})`,
+        meta: { tipo: "caixa_abrir" },
       });
-      setSessao(r.data);
+      if (r.queued) {
+        // Offline: sintetiza a sessão localmente para a UI funcionar até sincronizar.
+        // O backend irá criar a sessão real quando esta entrada da outbox enviar;
+        // entretanto, qualquer `pos/cobrar` que façamos também vai para a outbox
+        // e a ordem FIFO garante que a sessão é criada antes das cobranças.
+        const agora = new Date();
+        const ymd = agora.toISOString().slice(0,10).replace(/-/g,"");
+        setSessao({
+          id:             "tmp-caixa-" + agora.getTime(),
+          codigo:         `OFF-CX-${ymd}-${String(agora.getTime()).slice(-3)}`,
+          operador_id:    null,
+          operador_nome:  "(offline)",
+          nome_caixa:     payload.nome_caixa || "Caixa (offline)",
+          fundo_inicial:  payload.fundo_inicial,
+          total_esperado: payload.fundo_inicial,
+          abriu_em:       agora.toISOString(),
+          status:         "aberta",
+          _offline:       true,
+        });
+      } else {
+        setSessao(r.data);
+      }
       setShowAbrir(false);
       setAbrirForm({ fundo_inicial: "0", nome_caixa: "" });
     } catch (e) {
