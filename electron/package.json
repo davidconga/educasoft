@@ -1,36 +1,46 @@
 {
-  "name": "educa-desktop",
-  "version": "1.0.0",
-  "description": "Educa — Gestão Escolar (Desktop)",
+  "name": "educaja-desktop",
+  "version": "1.1.0",
+  "description": "Educajá — Gestão Escolar (Desktop, offline-first)",
   "main": "main.js",
   "author": "Okulandisa",
   "license": "UNLICENSED",
   "scripts": {
     "start": "electron .",
     "build:win": "electron-builder --win --x64",
-    "build:linux": "electron-builder --linux --x64"
+    "build:linux": "electron-builder --linux --x64",
+    "build:all":   "electron-builder --win --linux --x64"
   },
   "build": {
-    "appId": "com.educa.okulandisa",
-    "productName": "Educa",
+    "appId": "ao.educaja.desktop",
+    "productName": "Educajá",
+    "copyright": "© Okulandisa",
     "directories": { "output": "dist" },
-    "files": ["main.js", "offline.html", "icon.png"],
+    "files": ["main.js", "offline.html", "icon.png", "icon.ico"],
     "win": {
       "target": [
         { "target": "nsis", "arch": ["x64"] },
         { "target": "portable", "arch": ["x64"] }
       ],
-      "icon": "icon.png",
+      "icon": "icon.ico",
       "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "linux": {
       "target": [{ "target": "AppImage", "arch": ["x64"] }],
-      "icon": "icon.png"
+      "icon": "icon.png",
+      "category": "Office",
+      "synopsis": "Plataforma de gestão escolar Educajá"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "icon.png",
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerHeaderIcon": "icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Educajá",
       "installerLanguages": ["pt_PT"]
     }
   },

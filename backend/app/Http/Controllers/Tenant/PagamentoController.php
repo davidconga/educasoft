@@ -99,7 +99,10 @@ class PagamentoController extends Controller {
             "propina_id"    => "nullable|exists:precario_propinas,id",
             "emolumento_id" => "nullable|exists:precario_emolumentos,id",
             "plano_id"      => "nullable|exists:planos_pagamento,id",
+            // Aceitar `offline_local_id` (apenas tracing — não é guardado).
+            "offline_local_id" => "nullable|string|max:40",
         ]);
+        $offlineLocalId = $request->input("offline_local_id");
         $data = array_merge(
             $request->only(["aluno_id","valor","tipo","mes_referencia","metodo","data_vencimento","observacao"]),
             [
@@ -108,6 +111,9 @@ class PagamentoController extends Controller {
                 "emolumento_id" => $request->emolumento_id ?: null,
                 "referencia"    => "PAG-".strtoupper(Str::random(8)),
                 "status"        => "pendente",
+                // Pagamento criado a partir de outbox offline → marcar para auditoria.
+                "originado_offline" => $offlineLocalId !== null,
+                "sincronizado_em"   => $offlineLocalId !== null ? now() : null,
             ]
         );
         $pag = Pagamento::create($data);
@@ -126,7 +132,7 @@ class PagamentoController extends Controller {
 
     public function pagar(Request $request, Pagamento $pagamento) {
         $request->validate([
-            "metodo"                 => "required",
+            "metodo"                 => "required|in:dinheiro,transferencia,multicaixa,referencia,carteira",
             "data_pagamento"         => "required|date",
             "num_referencia_externa" => "required_if:metodo,multicaixa,transferencia,referencia|nullable|string|max:100",
             "comprovativo"           => "nullable|file|mimes:pdf,jpg,jpeg,png|max:5120",
@@ -144,6 +150,35 @@ class PagamentoController extends Controller {
             }
         }
 
+        $totalAPagar  = (float)$pagamento->valor + (float)($pagamento->multa_valor ?? 0) - (float)($pagamento->bolsa_valor ?? 0);
+        $valorCart    = $request->filled("valor_carteira") ? round((float)$request->valor_carteira, 2) : 0.0;
+
+        // Pagamento via saldo em carteira → valida cobertura
+        if ($request->metodo === "carteira") {
+            $saldo = self::computeSaldoCarteira((int)$pagamento->aluno_id);
+            if ($totalAPagar > $saldo + 0.001) {
+                return response()->json([
+                    "message"        => "Saldo em carteira insuficiente (necessário " . number_format($totalAPagar, 2, ',', '.') . " Kz, disponível " . number_format($saldo, 2, ',', '.') . " Kz).",
+                    "saldo_carteira" => round($saldo, 2),
+                ], 422);
+            }
+            $valorCart = 0; // metodo='carteira' já implica cobertura total — não usa o campo parcial
+        } elseif ($valorCart > 0) {
+            // Pagamento misto: parte do saldo + parte por outro método
+            if ($valorCart > $totalAPagar + 0.001) {
+                return response()->json([
+                    "message" => "Valor da carteira (" . number_format($valorCart, 2, ',', '.') . " Kz) excede o total a pagar (" . number_format($totalAPagar, 2, ',', '.') . " Kz).",
+                ], 422);
+            }
+            $saldo = self::computeSaldoCarteira((int)$pagamento->aluno_id);
+            if ($valorCart > $saldo + 0.001) {
+                return response()->json([
+                    "message"        => "Saldo em carteira insuficiente (pretendido " . number_format($valorCart, 2, ',', '.') . " Kz, disponível " . number_format($saldo, 2, ',', '.') . " Kz).",
+                    "saldo_carteira" => round($saldo, 2),
+                ], 422);
+            }
+        }
+
         $data = [
             "status"                 => "pago",
             "metodo"                 => $request->metodo,
@@ -152,6 +187,7 @@ class PagamentoController extends Controller {
             "multa_valor"            => (float)($pagamento->multa_valor ?? 0),
             "multa_id"               => $pagamento->multa_id ?? null,
             "valor_entregue"         => $request->filled("valor_entregue") ? (float)$request->valor_entregue : null,
+            "valor_carteira"         => $valorCart > 0 ? $valorCart : null,
         ];
         if ($request->hasFile("comprovativo")) {
             $data["comprovativo"] = $request->file("comprovativo")->store("comprovativos", "public");
@@ -182,9 +218,10 @@ class PagamentoController extends Controller {
             }
         }
 
-        // Troco → regista como crédito na carteira do aluno (considera multa no total devido)
+        // Troco → regista como crédito na carteira do aluno (considera multa no total devido,
+        // descontando a parcela paga pela própria carteira em pagamento misto)
         if ($request->filled('valor_entregue')) {
-            $totalDevido = (float) $pagamento->valor + (float) ($pagamento->multa_valor ?? 0);
+            $totalDevido = (float) $pagamento->valor + (float) ($pagamento->multa_valor ?? 0) - (float)($pagamento->valor_carteira ?? 0);
             $troco = (float) $request->valor_entregue - $totalDevido;
             if ($troco > 0.009) {
                 Pagamento::create([
@@ -210,7 +247,7 @@ class PagamentoController extends Controller {
         $request->validate([
             "ids"                    => "required|array|min:1",
             "ids.*"                  => "integer|exists:pagamentos,id",
-            "metodo"                 => "required",
+            "metodo"                 => "required|in:dinheiro,transferencia,multicaixa,referencia,carteira",
             "data_pagamento"         => "required|date",
             "num_referencia_externa" => "required_if:metodo,multicaixa,transferencia,referencia|nullable|string|max:100",
         ], [
@@ -220,11 +257,45 @@ class PagamentoController extends Controller {
         $pendentes = Pagamento::whereIn("id", $request->ids)->where("status", "pendente")->get();
         $this->aplicarMultas($pendentes);
 
+        $totalLote   = $pendentes->sum(fn($p) => (float)$p->valor + (float)($p->multa_valor ?? 0) - (float)($p->bolsa_valor ?? 0));
+        $valorCartLote = $request->filled("valor_carteira") ? round((float)$request->valor_carteira, 2) : 0.0;
+
+        // Pagamento via saldo em carteira → valida cobertura total (assume 1 só aluno no lote)
+        if ($request->metodo === "carteira" && $pendentes->isNotEmpty()) {
+            $alunoId = $pendentes->first()->aluno_id;
+            $saldo   = self::computeSaldoCarteira((int)$alunoId);
+            if ($totalLote > $saldo + 0.001) {
+                return response()->json([
+                    "message"        => "Saldo em carteira insuficiente (necessário " . number_format($totalLote, 2, ',', '.') . " Kz, disponível " . number_format($saldo, 2, ',', '.') . " Kz).",
+                    "saldo_carteira" => round($saldo, 2),
+                ], 422);
+            }
+            $valorCartLote = 0; // 'carteira' já cobre tudo, não usar campo parcial
+        } elseif ($valorCartLote > 0 && $pendentes->isNotEmpty()) {
+            if ($valorCartLote > $totalLote + 0.001) {
+                return response()->json([
+                    "message" => "Valor da carteira (" . number_format($valorCartLote, 2, ',', '.') . " Kz) excede o total do lote (" . number_format($totalLote, 2, ',', '.') . " Kz).",
+                ], 422);
+            }
+            $alunoId = $pendentes->first()->aluno_id;
+            $saldo   = self::computeSaldoCarteira((int)$alunoId);
+            if ($valorCartLote > $saldo + 0.001) {
+                return response()->json([
+                    "message"        => "Saldo em carteira insuficiente (pretendido " . number_format($valorCartLote, 2, ',', '.') . " Kz, disponível " . number_format($saldo, 2, ',', '.') . " Kz).",
+                    "saldo_carteira" => round($saldo, 2),
+                ], 422);
+            }
+        }
+
         // Gera lote_id único para agrupar todos os pagamentos deste batch
         $loteId = "LT-" . strtoupper(Str::random(10));
         $valorEntregueLote = $request->filled("valor_entregue") ? (float)$request->valor_entregue : null;
         $primeiro = true;
+        $remainingCart = $valorCartLote;
         foreach ($pendentes as $p) {
+            $totalP  = (float)$p->valor + (float)($p->multa_valor ?? 0) - (float)($p->bolsa_valor ?? 0);
+            $applyP  = min($remainingCart, $totalP);
+            $remainingCart -= $applyP;
             $p->update([
                 "status"                 => "pago",
                 "metodo"                 => $request->metodo,
@@ -233,6 +304,7 @@ class PagamentoController extends Controller {
                 "multa_valor"            => (float)($p->multa_valor ?? 0),
                 "multa_id"               => $p->multa_id ?? null,
                 "valor_entregue"         => $primeiro ? $valorEntregueLote : null,
+                "valor_carteira"         => $applyP > 0 ? round($applyP, 2) : null,
                 "lote_id"                => $loteId,
             ]);
             $primeiro = false;
@@ -267,9 +339,9 @@ class PagamentoController extends Controller {
             ->with("aluno.user", "aluno.matriculas.turma.classe.curso", "aluno.matriculas.turma.turnoObj")
             ->get();
 
-        // Troco → regista como crédito na carteira do aluno (considera multas)
+        // Troco → regista como crédito na carteira do aluno (considera multas e parcela paga via carteira)
         if ($request->filled('valor_entregue')) {
-            $totalPago = $pagamentos->sum(fn($p) => (float)$p->valor + (float)($p->multa_valor ?? 0));
+            $totalPago = $pagamentos->sum(fn($p) => (float)$p->valor + (float)($p->multa_valor ?? 0) - (float)($p->valor_carteira ?? 0));
             $troco     = (float) $request->valor_entregue - $totalPago;
             if ($troco > 0.009) {
                 $alunoId = $pagamentos->first()->aluno_id;
@@ -679,12 +751,17 @@ class PagamentoController extends Controller {
             ->orderBy('created_at', 'desc')
             ->get();
 
-        $totalPago      = $pagamentos->where('status', 'pago')->sum('valor');
+        // Total pago em propinas/emolumentos/matrículas (exclui movimentos puros de carteira).
+        $totalPago = $pagamentos
+            ->where('status', 'pago')
+            ->whereNotIn('tipo', ['deposito','levantamento'])
+            ->sum('valor');
         $totalPendente  = $pagamentos->whereIn('status', ['pendente', 'vencido'])->sum('valor');
         $totalEstornado = $pagamentos->where('status', 'estornado')->sum('valor');
         $saldo          = $totalPago - $totalPendente;
 
-        // Agrupa por tipo e ano
+        $saldoCarteira = self::computeSaldoCarteira($pagamentos);
+
         $porTipo = $pagamentos->groupBy('tipo')->map(fn($g) => [
             'total'   => $g->sum('valor'),
             'pago'    => $g->where('status', 'pago')->sum('valor'),
@@ -699,10 +776,155 @@ class PagamentoController extends Controller {
                 'total_pendente'  => $totalPendente,
                 'total_estornado' => $totalEstornado,
                 'saldo'           => $saldo,
+                'saldo_carteira'  => round($saldoCarteira, 2),
             ],
             'por_tipo'       => $porTipo,
             'pagamentos'     => $pagamentos,
         ]);
+    }
+
+    /**
+     * Saldo em carteira (verdadeiro): entradas (depósitos + créditos de troco)
+     * menos saídas (levantamentos + pagamentos liquidados via carteira).
+     * Aceita uma colecção ou um aluno_id — em ambos os casos opera só sobre status='pago'.
+     */
+    public static function computeSaldoCarteira($pagamentosOuAluno): float {
+        $col = is_numeric($pagamentosOuAluno)
+            ? Pagamento::where('aluno_id', $pagamentosOuAluno)->where('status','pago')->get()
+            : collect($pagamentosOuAluno)->where('status','pago');
+
+        $entradas = $col->filter(fn($p) =>
+            $p->tipo === 'deposito'
+            || ($p->tipo === 'outro' && str_starts_with((string)$p->referencia, 'CRED-'))
+        )->sum('valor');
+
+        // Saídas plenas: levantamentos e pagamentos cobertos 100% pela carteira
+        $saidas = $col->filter(fn($p) =>
+            $p->tipo === 'levantamento' || $p->metodo === 'carteira'
+        )->sum(fn($p) =>
+            $p->tipo === 'levantamento'
+                ? (float)$p->valor
+                : (float)$p->valor + (float)($p->multa_valor ?? 0) - (float)($p->bolsa_valor ?? 0)
+        );
+
+        // Saídas parciais: pagamentos mistos (cash + carteira) onde só uma parte saiu da carteira
+        $saidas += $col->filter(fn($p) =>
+            !in_array($p->tipo, ['deposito','levantamento'], true)
+            && $p->metodo !== 'carteira'
+            && (float)($p->valor_carteira ?? 0) > 0
+        )->sum('valor_carteira');
+
+        return (float)$entradas - (float)$saidas;
+    }
+
+    /** POST /pagamentos/carteira/{alunoId}/depositar */
+    public function depositarCarteira(Request $request, $alunoId) {
+        $authUser = $request->attributes->get("auth_user");
+        if ($authUser && $authUser->tipo !== "admin" && !in_array("carteira_depositar", (array)($authUser->permissoes ?? []), true)) {
+            return response()->json(["message" => "Sem permissão para depositar em carteira."], 403);
+        }
+
+        $request->validate([
+            "valor"                  => "required|numeric|gt:0",
+            "metodo"                 => "required|in:dinheiro,transferencia,multicaixa,referencia",
+            "data_pagamento"         => "nullable|date",
+            "num_referencia_externa" => "required_if:metodo,multicaixa,transferencia,referencia|nullable|string|max:100",
+            "observacao"             => "nullable|string|max:500",
+            "offline_lote_ref"       => "nullable|string|max:40",
+            "offline_data_pagamento" => "nullable|date",
+        ], [
+            "num_referencia_externa.required_if" => "Para método :input, é obrigatório indicar o nº de referência.",
+        ]);
+
+        if (!Aluno::where("id", $alunoId)->exists()) {
+            return response()->json(["message" => "Aluno não encontrado."], 404);
+        }
+
+        $isOffline      = $request->filled("offline_lote_ref") || $request->filled("offline_data_pagamento");
+        $dataPagamento  = $request->filled("offline_data_pagamento")
+            ? \Carbon\Carbon::parse($request->input("offline_data_pagamento"))->toDateString()
+            : ($request->data_pagamento ?: now()->toDateString());
+
+        $pag = Pagamento::create([
+            "aluno_id"               => $alunoId,
+            "tipo"                   => "deposito",
+            "valor"                  => round((float)$request->valor, 2),
+            "status"                 => "pago",
+            "metodo"                 => $request->metodo,
+            "data_pagamento"         => $dataPagamento,
+            "num_referencia_externa" => $request->num_referencia_externa,
+            "referencia"             => "DEP-" . strtoupper(Str::random(8)),
+            "observacao"             => $request->observacao ?: "Depósito em carteira",
+            "originado_offline"      => $isOffline,
+            "lote_offline_ref"       => $request->input("offline_lote_ref"),
+            "sincronizado_em"        => $isOffline ? now() : null,
+        ]);
+
+        try { CaixaController::registarPagamentoNaSessao($pag->fresh(), $request->attributes->get("auth_user")); }
+        catch (\Throwable $e) { Log::warning("Caixa: falha registar depósito {$pag->id}: " . $e->getMessage()); }
+
+        return response()->json([
+            "message"   => "Depósito registado.",
+            "pagamento" => $pag->fresh()->load("aluno.user"),
+            "saldo_carteira" => round(self::computeSaldoCarteira((int)$alunoId), 2),
+        ], 201);
+    }
+
+    /** POST /pagamentos/carteira/{alunoId}/levantar */
+    public function levantarCarteira(Request $request, $alunoId) {
+        $authUser = $request->attributes->get("auth_user");
+        if ($authUser && $authUser->tipo !== "admin" && !in_array("carteira_levantar", (array)($authUser->permissoes ?? []), true)) {
+            return response()->json(["message" => "Sem permissão para levantar de carteira."], 403);
+        }
+
+        $request->validate([
+            "valor"          => "required|numeric|min:1",
+            "data_pagamento" => "nullable|date",
+            "observacao"     => "nullable|string|max:500",
+            "offline_lote_ref"       => "nullable|string|max:40",
+            "offline_data_pagamento" => "nullable|date",
+        ]);
+
+        if (!Aluno::where("id", $alunoId)->exists()) {
+            return response()->json(["message" => "Aluno não encontrado."], 404);
+        }
+
+        $valor = round((float)$request->valor, 2);
+        $saldo = self::computeSaldoCarteira((int)$alunoId);
+        if ($valor > $saldo + 0.001) {
+            return response()->json([
+                "message"        => "Saldo em carteira insuficiente.",
+                "saldo_carteira" => round($saldo, 2),
+            ], 422);
+        }
+
+        $isOffline     = $request->filled("offline_lote_ref") || $request->filled("offline_data_pagamento");
+        $dataPagamento = $request->filled("offline_data_pagamento")
+            ? \Carbon\Carbon::parse($request->input("offline_data_pagamento"))->toDateString()
+            : ($request->data_pagamento ?: now()->toDateString());
+
+        $pag = Pagamento::create([
+            "aluno_id"       => $alunoId,
+            "tipo"           => "levantamento",
+            "valor"          => $valor,
+            "status"         => "pago",
+            "metodo"         => "dinheiro",
+            "data_pagamento" => $dataPagamento,
+            "referencia"     => "LEV-" . strtoupper(Str::random(8)),
+            "observacao"     => $request->observacao ?: "Levantamento de saldo em carteira",
+            "originado_offline" => $isOffline,
+            "lote_offline_ref"  => $request->input("offline_lote_ref"),
+            "sincronizado_em"   => $isOffline ? now() : null,
+        ]);
+
+        try { CaixaController::registarPagamentoNaSessao($pag->fresh(), $request->attributes->get("auth_user")); }
+        catch (\Throwable $e) { Log::warning("Caixa: falha registar levantamento {$pag->id}: " . $e->getMessage()); }
+
+        return response()->json([
+            "message"        => "Levantamento registado.",
+            "pagamento"      => $pag->fresh()->load("aluno.user"),
+            "saldo_carteira" => round(self::computeSaldoCarteira((int)$alunoId), 2),
+        ], 201);
     }
 
     public function relatorioFinanceiro(Request $request) {

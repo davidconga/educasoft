@@ -63,6 +63,8 @@ export default function Login() {
       }
 
       setAuth(data.token, data.user, data.escola, form.escola_codigo, data.plano ?? null, data.limites ?? null);
+      // Warm-up da cache offline (fire-and-forget) — popula o SW com as leituras frequentes.
+      import("../../offline/warmup").then(({ warmupCache }) => warmupCache(data.user?.tipo));
       navigate(tipoConfig.redirect);
     } catch (err) {
       setError(err.response?.data?.message || "Credenciais inválidas. Verifique o código da escola.");

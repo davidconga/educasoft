@@ -2,24 +2,75 @@
 <html lang="pt">
 <head>
   <meta charset="UTF-8" />
-  <title>Sem ligação</title>
+  <title>Educajá — Sem ligação</title>
   <style>
-    body { margin: 0; display: flex; align-items: center; justify-content: center;
-           min-height: 100vh; font-family: system-ui, sans-serif;
-           background: linear-gradient(135deg, #1e3a8a, #1d4ed8); color: #fff; }
-    .box { text-align: center; padding: 40px; }
-    h1 { font-size: 1.8rem; margin-bottom: 8px; }
-    p  { color: #93c5fd; margin-bottom: 24px; }
-    button { background: #fff; color: #1d4ed8; border: none; padding: 12px 28px;
-             border-radius: 10px; font-size: 1rem; font-weight: 600; cursor: pointer; }
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+      background: linear-gradient(135deg, #1e3a8a, #1d4ed8);
+      color: #fff;
+      padding: 24px;
+    }
+    .box {
+      text-align: center;
+      max-width: 480px;
+    }
+    .icon {
+      width: 72px;
+      height: 72px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.12);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      font-size: 36px;
+    }
+    h1 { font-size: 1.6rem; margin: 0 0 8px; font-weight: 700; }
+    p  { color: #cbd5e1; margin: 0 0 20px; line-height: 1.5; font-size: 0.95rem; }
+    .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    button {
+      background: #fff;
+      color: #1d4ed8;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
     button:hover { background: #dbeafe; }
+    button.ghost {
+      background: transparent;
+      color: #cbd5e1;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+    }
+    button.ghost:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+    .hint { margin-top: 28px; font-size: 0.78rem; color: #94a3b8; }
   </style>
 </head>
 <body>
   <div class="box">
+    <div class="icon">📡</div>
     <h1>Sem ligação à internet</h1>
-    <p>Verifique a sua ligação e tente novamente.</p>
-    <button onclick="window.location.reload()">Tentar novamente</button>
+    <p>
+      O Educajá não conseguiu carregar e ainda não há cache local nesta máquina.
+      Verifique a sua ligação à internet e tente novamente.
+    </p>
+    <div class="row">
+      <button onclick="window.location.reload()">Tentar novamente</button>
+      <button class="ghost" onclick="window.location.href='https://educaja.ao'">Ir para educaja.ao</button>
+    </div>
+    <p class="hint">
+      Depois da primeira ligação bem-sucedida, a aplicação fica disponível mesmo sem internet.
+    </p>
   </div>
 </body>
 </html>

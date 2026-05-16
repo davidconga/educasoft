@@ -6,10 +6,10 @@
  * Cada impresso tem duas cópias: Aluno + Escola
  */
 
-export function buildReciboHtml(pagamento, escola, carteira = null) {
+export function buildReciboHtml(pagamento, escola, carteira = null, viaNumber = 1) {
   const lista = Array.isArray(pagamento) ? pagamento : [pagamento];
   const title = lista.length === 1 ? "Factura-Recibo" : "Recibo de Cobranças";
-  const body  = lista.length === 1 ? buildSingle(lista[0], escola, carteira) : buildConsolidado(lista, escola, carteira);
+  const body  = lista.length === 1 ? buildSingle(lista[0], escola, carteira, viaNumber) : buildConsolidado(lista, escola, carteira, viaNumber);
   return buildFormatWrapper(title, body, escola?.formato_impressao);
 }
 
@@ -20,31 +20,38 @@ function openHtml(html) {
   if (win) win.addEventListener("load", () => URL.revokeObjectURL(url), { once: true });
 }
 
-export function imprimirRecibo(pagamento, escola, carteira = null) {
-  openHtml(buildReciboHtml(pagamento, escola, carteira));
+export function imprimirRecibo(pagamento, escola, carteira = null, viaNumber = 1) {
+  openHtml(buildReciboHtml(pagamento, escola, carteira, viaNumber));
 }
 
 /* Bloco da carteira (aluno) — usado no recibo individual e consolidado. */
 function buildCarteiraBlock(c) {
   if (!c) return "";
-  const fmtV = (v) => Number(v || 0).toLocaleString("pt-AO");
+  const fmtV = (v) => Number(v || 0).toLocaleString("pt-PT");
   const saldo = (c.saldo ?? (Number(c.total_pago||0) - Number(c.total_pendente||0)));
   const saldoCls = saldo >= 0 ? "color:#16a34a" : "color:#dc2626";
+  const temSaldoCart = c.saldo_carteira !== undefined && c.saldo_carteira !== null;
+  const saldoCartCls = Number(c.saldo_carteira||0) > 0 ? "color:#4f46e5" : "color:#94a3b8";
   return `
 <div class="sec-title">Saldo da Carteira</div>
-<div class="aluno-box" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding-bottom:14px">
+<div class="aluno-box" style="display:grid;grid-template-columns:repeat(${temSaldoCart ? 4 : 3},1fr);gap:12px;padding-bottom:14px">
   <div style="text-align:center">
     <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em">Total Pago</div>
     <div style="font-weight:700;color:#16a34a;font-size:13px;margin-top:2px">${fmtV(c.total_pago)} Kz</div>
   </div>
-  <div style="text-align:center;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
+  <div style="text-align:center;border-left:1px solid #e2e8f0;${temSaldoCart ? "" : "border-right:1px solid #e2e8f0"}">
     <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em">Pendente</div>
     <div style="font-weight:700;color:#d97706;font-size:13px;margin-top:2px">${fmtV(c.total_pendente)} Kz</div>
   </div>
-  <div style="text-align:center">
+  <div style="text-align:center;${temSaldoCart ? "border-left:1px solid #e2e8f0" : ""}">
     <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em">Saldo</div>
     <div style="font-weight:700;font-size:13px;margin-top:2px;${saldoCls}">${fmtV(saldo)} Kz</div>
   </div>
+  ${temSaldoCart ? `
+  <div style="text-align:center;border-left:1px solid #e2e8f0">
+    <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em">Em Carteira</div>
+    <div style="font-weight:700;font-size:13px;margin-top:2px;${saldoCartCls}">${fmtV(c.saldo_carteira)} Kz</div>
+  </div>` : ""}
 </div>`;
 }
 
@@ -211,6 +218,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:#1e293b;backgr
 var FMT = {
   a4: {
     pageSize: 'A4 portrait',
+    pageMargin: '6mm',
     wrapW: '210mm',
     innerDir: 'column',
     docDisplay: 'block',
@@ -219,6 +227,7 @@ var FMT = {
   },
   a5: {
     pageSize: 'A5 portrait',
+    pageMargin: '6mm',
     wrapW: '148mm',
     innerDir: 'column',
     docDisplay: 'block',
@@ -227,6 +236,7 @@ var FMT = {
   },
   ticket: {
     pageSize: '80mm auto',
+    pageMargin: '0',  // suprime cabeçalho/rodapé do browser (URL/data verticais)
     wrapW: '80mm',
     innerDir: 'column',
     docDisplay: 'none',
@@ -238,12 +248,12 @@ var FMT = {
 function setFmt(f) {
   var c = FMT[f] || FMT.a4;
   document.getElementById('dyn').textContent =
-    '@page{size:' + c.pageSize + ';margin:6mm;}' +
+    '@page{size:' + c.pageSize + ';margin:' + c.pageMargin + ';}' +
     '#wrap{padding:' + (f==='ticket'?'8px':'16px') + ';justify-content:center;}' +
     '#inner{width:' + c.wrapW + ';display:flex;flex-direction:' + c.innerDir + ';}' +
     '.doc{display:' + c.docDisplay + ';transform:scale(' + c.docScale + ');transform-origin:top left;width:' + (c.docScale < 1 ? (100/c.docScale)+'%' : '100%') + ';}' +
-    '.ticket{display:' + c.ticketDisplay + ';}' +
-    '@media print{.doc{transform:none;width:100%;}}';
+    '.ticket{display:' + c.ticketDisplay + ';' + (f==='ticket' ? 'border:none !important;padding:3mm 4mm !important;' : '') + '}' +
+    '@media print{.doc{transform:none;width:100%;}' + (f==='ticket' ? '.ticket{border:none !important;}' : '') + '}';
 
   ['a4','a5','ticket'].forEach(function(k){
     document.getElementById('btn-'+k).classList.toggle('active', k===f);
@@ -261,7 +271,7 @@ setFmt(DEFAULT_FMT);
 
 /* ─── helpers ─────────────────────────────────────────────────── */
 
-function fmt(v) { return Number(v || 0).toLocaleString("pt-AO") + " Kz"; }
+function fmt(v) { return Number(v || 0).toLocaleString("pt-PT") + " Kz"; }
 function buildQrUrl(p, escola, size = 160) {
   const codigo = escola?.codigo || "esc";
   const ref    = p.referencia || `PAG-${p.id}`;
@@ -339,9 +349,53 @@ function buildLogo(escola, nome) {
 
 /* ─── ticket compacto ─────────────────────────────────────────── */
 
-function buildTicketSingle(p, escola) {
+function buildTicketCarteiraBlock(c) {
+  if (!c) return "";
+  const fmtV = (v) => Number(v || 0).toLocaleString("pt-PT");
+  const anterior     = (c.saldo_carteira_anterior !== undefined && c.saldo_carteira_anterior !== null) ? Number(c.saldo_carteira_anterior) : null;
+  const actual       = (c.saldo_carteira_actual   !== undefined && c.saldo_carteira_actual   !== null) ? Number(c.saldo_carteira_actual)
+                     : (c.saldo_carteira          !== undefined && c.saldo_carteira          !== null) ? Number(c.saldo_carteira) : null;
+  if (actual === null && anterior === null) return ""; // sem dados de carteira → não mostrar nada
+  return `
+  <hr class="tk-sep"/>
+  <div class="tk-center tk-bold" style="font-size:13px;">SALDO CARTEIRA</div>
+  <hr class="tk-sep"/>
+  ${anterior !== null ? `<div class="tk-row"><span class="tk-label">Anterior:</span><span>${fmtV(anterior)} Kz</span></div>` : ""}
+  ${actual   !== null ? `<div class="tk-row" style="font-size:14px;"><span class="tk-label">Actual:</span><span>${fmtV(actual)} Kz</span></div>` : ""}`;
+}
+
+function viaLabel(n, pagamentos) {
+  const lista = Array.isArray(pagamentos) ? pagamentos : [pagamentos];
+  if (lista.some(p => p && p._offline)) {
+    return "RECIBO PROVISÓRIO — PENDENTE DE SINCRONIZAÇÃO";
+  }
+  const num = Math.max(1, Number(n || 1));
+  if (num === 1) return "1ª VIA — ORIGINAL";
+  if (num === 2) return "2ª VIA — REIMPRESSO";
+  return `${num}ª VIA — REIMPRESSO`;
+}
+
+function offlineBanner(pagamentos) {
+  const lista = Array.isArray(pagamentos) ? pagamentos : [pagamentos];
+  if (!lista.some(p => p && p._offline)) return "";
+  return `
+<div style="background:#fef3c7;border-bottom:2px solid #f59e0b;color:#92400e;padding:10px 24px;font-size:11px;font-weight:700;text-align:center;letter-spacing:.04em;">
+  ⚠ DOCUMENTO PROVISÓRIO — EMITIDO OFFLINE. Será reemitido com nº oficial assim que voltar a internet.
+</div>`;
+}
+
+function offlineTicketBanner(pagamentos) {
+  const lista = Array.isArray(pagamentos) ? pagamentos : [pagamentos];
+  if (!lista.some(p => p && p._offline)) return "";
+  return `
+<div class="tk-center" style="background:#000;color:#fff;padding:3px 0;font-size:10px;letter-spacing:.04em;font-weight:900;">
+  ★ PROVISÓRIO OFFLINE ★
+</div>`;
+}
+
+function buildTicketSingle(p, escola, carteira = null, viaNumber = 1) {
   const escolaNome = escola?.nome || "Educajá";
-  const logoImg    = escola?.logo
+  const logoImg    = escola?.logo && !p?._offline
     ? `<img src="${window.location.origin}/storage/${escola.logo}" style="height:72px;max-width:60mm;object-fit:contain;margin-bottom:3px;" onerror="this.style.display='none'"/><br/>`
     : "";
   const aluno    = p.aluno?.user?.nome || "—";
@@ -353,11 +407,20 @@ function buildTicketSingle(p, escola) {
   const turmaNome = turmaT?.nome || "—";
   const turnoT    = turmaT?.turnoObj?.nome || turmaT?.turno || "—";
   const anoLectT  = resolveAnoLectivo(matricula, turmaT, p);
+  const multaV    = Number(p.multa_valor || 0);
+  const bolsaV    = Number(p.bolsa_valor || 0);
+  const cartV     = Number(p.valor_carteira || 0);
+  const entregueV = Number(p.valor_entregue || 0);
+  const totalP    = Number(p.valor || 0) + multaV - bolsaV;
+  const restoCash = Math.max(0, totalP - cartV);
+  const trocoV    = entregueV > 0 ? entregueV - restoCash : 0;
+  const isCarteiraTotal = p.metodo === "carteira";
   return `
 <div class="ticket">
+  ${offlineTicketBanner(p)}
   <div class="tk-center">${logoImg}<div class="tk-bold" style="font-size:14px;">${escolaNome}</div><div style="font-size:10px;font-weight:700;">Sistema de Gestão Escolar</div></div>
   <hr class="tk-sep"/>
-  <div class="tk-center tk-bold" style="font-size:14px;">FACTURA-RECIBO</div>
+  <div class="tk-center tk-bold" style="font-size:14px;">${p?._offline ? "FACTURA-RECIBO (PROVISÓRIO)" : "FACTURA-RECIBO"}</div>
   <div class="tk-center" style="font-size:11px;font-weight:700;">Nº ${p.referencia || "—"}</div>
   <hr class="tk-sep"/>
   <div class="tk-row"><span class="tk-label">Aluno:</span><span>${aluno}</span></div>
@@ -374,27 +437,48 @@ function buildTicketSingle(p, escola) {
     <div class="tk-item-desc">${tipoLabel(p.tipo)}</div>
     ${p.mes_referencia ? `<div class="tk-item-mes">Mês pago: ${fmtMesRef(p.mes_referencia)}</div>` : ""}
     <div class="tk-item-val"><span>Valor:</span><span>${fmt(p.valor)}</span></div>
+    ${multaV > 0 ? `<div class="tk-item-val"><span>Multa:</span><span>${fmt(multaV)}</span></div>` : ""}
+    ${bolsaV > 0 ? `<div class="tk-item-val"><span>Bolsa:</span><span>-${fmt(bolsaV)}</span></div>` : ""}
   </div>
   <hr class="tk-sep"/>
-  <div class="tk-row"><span class="tk-label">Método:</span><span>${metodoPag(p.metodo)}</span></div>
   <div class="tk-row"><span class="tk-label">Data Pag.:</span><span>${fmtDate(p.data_pagamento)}</span></div>
   <div class="tk-row"><span class="tk-label">Emissão:</span><span>${hoje}</span></div>
-  <div class="tk-total"><span>TOTAL</span><span>${fmt(p.valor)}</span></div>
-  <div style="text-align:center;margin-top:6mm;">
+  <hr class="tk-sep"/>
+  <div class="tk-center tk-bold" style="font-size:12px;">ENTREGOU</div>
+  <hr class="tk-sep"/>
+  ${isCarteiraTotal
+    ? `<div class="tk-row"><span class="tk-label">Carteira:</span><span>${fmt(totalP)}</span></div>`
+    : `${restoCash > 0 ? `<div class="tk-row"><span class="tk-label">${metodoPag(p.metodo)}:</span><span>${fmt(restoCash)}</span></div>` : ""}
+       ${cartV > 0 ? `<div class="tk-row"><span class="tk-label">Carteira:</span><span>${fmt(cartV)}</span></div>` : ""}`}
+  <div class="tk-total"><span>TOTAL</span><span>${fmt(totalP)}</span></div>
+  ${entregueV > 0 && !isCarteiraTotal ? `<div class="tk-row"><span class="tk-label">Valor Entregue:</span><span>${fmt(entregueV)}</span></div>` : ""}
+  ${entregueV > 0 && trocoV > 0 ? `<div class="tk-row"><span class="tk-label">Troco:</span><span>${fmt(trocoV)}</span></div>` : ""}
+  ${buildTicketCarteiraBlock(carteira)}
+  ${p?._offline ? "" : `<div style="text-align:center;margin-top:6mm;">
     <img src="${buildQrUrl(p, escola, 110)}" alt="QR" style="width:24mm;height:24mm;"/>
     <div style="font-size:8px;color:#666;margin-top:2px;">Verificar autenticidade</div>
-  </div>
+  </div>`}
   <div class="tk-sig">Tesoureiro(a)</div>
   <div class="tk-sig">Encarregado / Aluno</div>
+  <hr class="tk-sep"/>
+  <div class="tk-center tk-bold" style="font-size:10px;letter-spacing:.05em;">${viaLabel(viaNumber, p)}</div>
 </div>`;
 }
 
-function buildTicketConsolidado(pagamentos, escola) {
+function buildTicketConsolidado(pagamentos, escola, carteira = null, viaNumber = 1) {
+  const isOffline  = pagamentos.some(p => p?._offline);
   const escolaNome = escola?.nome || "Educajá";
-  const logoImg    = escola?.logo
+  const logoImg    = escola?.logo && !isOffline
     ? `<img src="${window.location.origin}/storage/${escola.logo}" style="height:72px;max-width:60mm;object-fit:contain;margin-bottom:3px;" onerror="this.style.display='none'"/><br/>`
     : "";
-  const total = pagamentos.reduce((s, p) => s + Number(p.valor || 0), 0);
+  const total = pagamentos.reduce((s, p) =>
+    s + Number(p.valor || 0) + Number(p.multa_valor || 0) - Number(p.bolsa_valor || 0), 0);
+  const cartTotal = pagamentos.reduce((s, p) => s + Number(p.valor_carteira || 0), 0);
+  const entregueTotal = pagamentos.reduce((s, p) => s + Number(p.valor_entregue || 0), 0);
+  const restoCashTotal = Math.max(0, total - cartTotal);
+  const trocoTotal     = entregueTotal > 0 ? entregueTotal - restoCashTotal : 0;
+  const metodoPrincipal = pagamentos[0]?.metodo;
+  const isCarteiraTotal = metodoPrincipal === "carteira";
   const alunoIds = [...new Set(pagamentos.map(p => p.aluno?.id).filter(Boolean))];
   const mesmoAluno = alunoIds.length === 1;
   const primeiro   = pagamentos[0]?.aluno;
@@ -411,31 +495,48 @@ function buildTicketConsolidado(pagamentos, escola) {
   <hr class="tk-sep"/>` : "";
   const linhas = pagamentos.map(p => {
     const nomeAluno = !mesmoAluno ? `<div class="tk-item-mes" style="font-size:11px;">Aluno: ${p.aluno?.user?.nome || "—"}</div>` : "";
+    const mV = Number(p.multa_valor || 0);
+    const bV = Number(p.bolsa_valor || 0);
     return `<div class="tk-item">
       <div class="tk-item-desc">${tipoLabel(p.tipo)}</div>
       ${p.mes_referencia ? `<div class="tk-item-mes">Mês pago: ${fmtMesRef(p.mes_referencia)}</div>` : ""}
       ${nomeAluno}
       <div class="tk-item-val"><span>Valor:</span><span>${fmt(p.valor)}</span></div>
+      ${mV > 0 ? `<div class="tk-item-val"><span>Multa:</span><span>${fmt(mV)}</span></div>` : ""}
+      ${bV > 0 ? `<div class="tk-item-val"><span>Bolsa:</span><span>-${fmt(bV)}</span></div>` : ""}
     </div>`;
   }).join("");
   return `
 <div class="ticket">
+  ${offlineTicketBanner(pagamentos)}
   <div class="tk-center">${logoImg}<div class="tk-bold" style="font-size:14px;">${escolaNome}</div><div style="font-size:10px;font-weight:700;">Sistema de Gestão Escolar</div></div>
   <hr class="tk-sep"/>
-  <div class="tk-center tk-bold" style="font-size:14px;">RECIBO DE COBRANÇAS</div>
+  <div class="tk-center tk-bold" style="font-size:14px;">${isOffline ? "RECIBO DE COBRANÇAS (PROVISÓRIO)" : "RECIBO DE COBRANÇAS"}</div>
   <div class="tk-center" style="font-size:11px;font-weight:700;">${pagamentos.length} pagamento(s) · ${hoje}</div>
   <hr class="tk-sep"/>
   ${cabecalhoAluno}
   <div class="tk-center tk-bold" style="font-size:12px;">DESCRIÇÃO DOS SERVIÇOS</div>
   <hr class="tk-sep"/>
   ${linhas}
+  <hr class="tk-sep"/>
+  <div class="tk-center tk-bold" style="font-size:12px;">ENTREGOU</div>
+  <hr class="tk-sep"/>
+  ${isCarteiraTotal
+    ? `<div class="tk-row"><span class="tk-label">Carteira:</span><span>${fmt(total)}</span></div>`
+    : `${restoCashTotal > 0 ? `<div class="tk-row"><span class="tk-label">${metodoPag(metodoPrincipal)}:</span><span>${fmt(restoCashTotal)}</span></div>` : ""}
+       ${cartTotal > 0 ? `<div class="tk-row"><span class="tk-label">Carteira:</span><span>${fmt(cartTotal)}</span></div>` : ""}`}
   <div class="tk-total"><span>TOTAL</span><span>${fmt(total)}</span></div>
-  <div style="text-align:center;margin-top:6mm;">
+  ${entregueTotal > 0 && !isCarteiraTotal ? `<div class="tk-row"><span class="tk-label">Valor Entregue:</span><span>${fmt(entregueTotal)}</span></div>` : ""}
+  ${entregueTotal > 0 && trocoTotal > 0 ? `<div class="tk-row"><span class="tk-label">Troco:</span><span>${fmt(trocoTotal)}</span></div>` : ""}
+  ${mesmoAluno ? buildTicketCarteiraBlock(carteira) : ""}
+  ${isOffline ? "" : `<div style="text-align:center;margin-top:6mm;">
     <img src="${buildQrUrl(pagamentos[0], escola, 110)}" alt="QR" style="width:24mm;height:24mm;"/>
     <div style="font-size:8px;color:#666;margin-top:2px;">${pagamentos[0]?.lote_id || ""}</div>
-  </div>
+  </div>`}
   <div class="tk-sig">Tesoureiro(a)</div>
   <div class="tk-sig">Encarregado / Aluno</div>
+  <hr class="tk-sep"/>
+  <div class="tk-center tk-bold" style="font-size:10px;letter-spacing:.05em;">${viaLabel(viaNumber, pagamentos)}</div>
 </div>`;
 }
 
@@ -466,16 +567,20 @@ function buildTicketMatricula(m, escola) {
 
 /* ─── recibo full card ────────────────────────────────────────── */
 
-function buildSingle(p, escola, carteira = null) {
+function buildSingle(p, escola, carteira = null, viaNumber = 1) {
   const escolaNome = escola?.nome || "Educajá";
   const aluno      = p.aluno?.user?.nome || "—";
   const numAluno   = p.aluno?.numero_aluno || "";
   const turma      = pickMatricula(p.aluno)?.turma?.nome || "—";
   const descricao  = tipoLabel(p.tipo) + (p.mes_referencia ? ` — ${fmtMesRef(p.mes_referencia)}` : "");
+  const multaV     = Number(p.multa_valor || 0);
+  const bolsaV     = Number(p.bolsa_valor || 0);
+  const totalP     = Number(p.valor || 0) + multaV - bolsaV;
 
   return `
-${buildTicketSingle(p, escola)}
+${buildTicketSingle(p, escola, carteira, viaNumber)}
 <div class="doc">
+  ${offlineBanner(p)}
   <div class="header">
     ${buildLogo(escola, escolaNome)}
     <div class="escola-info">
@@ -483,7 +588,7 @@ ${buildTicketSingle(p, escola)}
       <div class="escola-sub">Sistema de Gestão Escolar</div>
     </div>
     <div class="doc-type">
-      <div class="doc-label">FACTURA-RECIBO</div>
+      <div class="doc-label">${p?._offline ? "FACTURA-RECIBO PROVISÓRIO" : "FACTURA-RECIBO"}</div>
       <div class="doc-ref">Nº ${p.referencia || "—"}</div>
     </div>
   </div>
@@ -506,14 +611,26 @@ ${buildTicketSingle(p, escola)}
       <th style="width:150px">Referência</th>
       <th class="th-last" style="width:120px">Valor</th>
     </tr></thead>
-    <tbody><tr>
-      <td>${descricao}</td>
-      <td class="td-mono">${p.referencia || "—"}</td>
-      <td class="td-right">${fmt(p.valor)}</td>
-    </tr></tbody>
+    <tbody>
+      <tr>
+        <td>${descricao}</td>
+        <td class="td-mono">${p.referencia || "—"}</td>
+        <td class="td-right">${fmt(p.valor)}</td>
+      </tr>
+      ${multaV > 0 ? `<tr>
+        <td>Multa por atraso</td>
+        <td class="td-mono">—</td>
+        <td class="td-right" style="color:#d97706">${fmt(multaV)}</td>
+      </tr>` : ""}
+      ${bolsaV > 0 ? `<tr>
+        <td>Bolsa aplicada</td>
+        <td class="td-mono">—</td>
+        <td class="td-right" style="color:#16a34a">-${fmt(bolsaV)}</td>
+      </tr>` : ""}
+    </tbody>
     <tfoot><tr>
       <td colspan="2" class="tf-label">TOTAL</td>
-      <td class="tf-valor">${fmt(p.valor)}</td>
+      <td class="tf-valor">${fmt(totalP)}</td>
     </tr></tfoot>
   </table>
   ${buildCarteiraBlock(carteira)}
@@ -522,18 +639,20 @@ ${buildTicketSingle(p, escola)}
       <div style="flex:1"><div class="ass-linha" style="height:1px;background:#94a3b8;margin-top:36px;margin-bottom:6px;"></div><div class="ass-label">Tesoureiro(a)</div></div>
       <div style="flex:1"><div class="ass-linha" style="height:1px;background:#94a3b8;margin-top:36px;margin-bottom:6px;"></div><div class="ass-label">Encarregado de Educação / Aluno</div></div>
     </div>
-    <div style="text-align:center;">
+    ${p?._offline ? "" : `<div style="text-align:center;">
       <img src="${buildQrUrl(p, escola)}" alt="QR" style="width:90px;height:90px;border:1px solid #e5e7eb;padding:3px;border-radius:4px;background:#fff;"/>
       <div style="font-size:8px;color:#94a3b8;margin-top:3px;">Verificar autenticidade</div>
-    </div>
+    </div>`}
   </div>
-  <div class="rodape">Documento emitido electronicamente pelo sistema Educajá &nbsp;·&nbsp; ${hoje}</div>
+  <div class="rodape">Documento emitido electronicamente pelo sistema Educajá &nbsp;·&nbsp; ${hoje} &nbsp;·&nbsp; <strong>${viaLabel(viaNumber, p)}</strong></div>
 </div>`;
 }
 
-function buildConsolidado(pagamentos, escola, carteira = null) {
+function buildConsolidado(pagamentos, escola, carteira = null, viaNumber = 1) {
+  const isOffline  = pagamentos.some(p => p?._offline);
   const escolaNome = escola?.nome || "Educajá";
-  const total      = pagamentos.reduce((s, p) => s + Number(p.valor || 0), 0);
+  const total      = pagamentos.reduce((s, p) =>
+    s + Number(p.valor || 0) + Number(p.multa_valor || 0) - Number(p.bolsa_valor || 0), 0);
   const alunoIds   = [...new Set(pagamentos.map(p => p.aluno?.id).filter(Boolean))];
   const mesmAluno  = alunoIds.length === 1;
   const primeiro   = pagamentos[0]?.aluno;
@@ -542,14 +661,24 @@ function buildConsolidado(pagamentos, escola, carteira = null) {
   const datas      = pagamentos.map(p => p.data_pagamento).filter(Boolean).sort();
   const dataStr    = datas.length ? fmtDate(datas[datas.length - 1]) : hoje;
 
-  const linhas = pagamentos.map(p => `
+  const linhas = pagamentos.map(p => {
+    const mV = Number(p.multa_valor || 0);
+    const bV = Number(p.bolsa_valor || 0);
+    const aPagar = Number(p.valor || 0) + mV - bV;
+    const extra  = (mV > 0 || bV > 0)
+      ? `<div style="font-size:9px;color:#94a3b8;margin-top:2px">${
+          [mV > 0 ? `multa ${fmt(mV)}` : "", bV > 0 ? `bolsa -${fmt(bV)}` : ""].filter(Boolean).join(" · ")
+        }</div>`
+      : "";
+    return `
     <tr>
       ${!mesmAluno ? `<td>${p.aluno?.user?.nome || "—"}</td>` : ""}
-      <td>${tipoLabel(p.tipo)}${p.mes_referencia ? ` — ${fmtMesRef(p.mes_referencia)}` : ""}</td>
+      <td>${tipoLabel(p.tipo)}${p.mes_referencia ? ` — ${fmtMesRef(p.mes_referencia)}` : ""}${extra}</td>
       <td class="td-mono">${p.referencia || "—"}</td>
       <td>${metodoPag(p.metodo)}</td>
-      <td class="td-right">${fmt(p.valor)}</td>
-    </tr>`).join("");
+      <td class="td-right">${fmt(aPagar)}</td>
+    </tr>`;
+  }).join("");
 
   const colspan = mesmAluno ? 4 : 5;
   const alunoBlock = mesmAluno ? `
@@ -561,8 +690,9 @@ function buildConsolidado(pagamentos, escola, carteira = null) {
     </div>` : "";
 
   return `
-${buildTicketConsolidado(pagamentos, escola)}
+${buildTicketConsolidado(pagamentos, escola, carteira, viaNumber)}
 <div class="doc">
+  ${offlineBanner(pagamentos)}
   <div class="header">
     ${buildLogo(escola, escolaNome)}
     <div class="escola-info">
@@ -570,7 +700,7 @@ ${buildTicketConsolidado(pagamentos, escola)}
       <div class="escola-sub">Sistema de Gestão Escolar</div>
     </div>
     <div class="doc-type">
-      <div class="doc-label">RECIBO DE COBRANÇAS</div>
+      <div class="doc-label">${isOffline ? "RECIBO PROVISÓRIO" : "RECIBO DE COBRANÇAS"}</div>
       <div class="doc-ref">${pagamentos.length} pagamento(s)</div>
     </div>
   </div>
@@ -602,12 +732,12 @@ ${buildTicketConsolidado(pagamentos, escola)}
       <div style="flex:1"><div style="height:1px;background:#94a3b8;margin-top:36px;margin-bottom:6px;"></div><div class="ass-label">Tesoureiro(a)</div></div>
       <div style="flex:1"><div style="height:1px;background:#94a3b8;margin-top:36px;margin-bottom:6px;"></div><div class="ass-label">Encarregado de Educação / Aluno</div></div>
     </div>
-    <div style="text-align:center;">
+    ${isOffline ? "" : `<div style="text-align:center;">
       <img src="${buildQrUrl(pagamentos[0], escola)}" alt="QR" style="width:90px;height:90px;border:1px solid #e5e7eb;padding:3px;border-radius:4px;background:#fff;"/>
       <div style="font-size:8px;color:#94a3b8;margin-top:3px;">Verificar lote: ${pagamentos[0]?.lote_id || pagamentos[0]?.referencia || ""}</div>
-    </div>
+    </div>`}
   </div>
-  <div class="rodape">Documento emitido electronicamente pelo sistema Educajá &nbsp;·&nbsp; ${hoje}</div>
+  <div class="rodape">Documento emitido electronicamente pelo sistema Educajá &nbsp;·&nbsp; ${hoje} &nbsp;·&nbsp; <strong>${viaLabel(viaNumber, pagamentos)}</strong></div>
 </div>`;
 }
 
