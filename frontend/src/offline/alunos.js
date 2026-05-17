@@ -12,7 +12,8 @@ import { getDb, STORES, setMeta, getMeta } from "./db";
  *    o último snapshot que tivermos.
  */
 
-const SNAPSHOT_META_KEY = "alunos_snapshot_meta";
+const SNAPSHOT_META_KEY  = "alunos_snapshot_meta";
+const DIVIDAS_META_KEY   = "dividas_snapshot_meta";
 
 function normaliza(s) {
   return String(s || "")
@@ -103,4 +104,54 @@ export async function getDividasLocal(alunoId) {
   const db = await getDb();
   const row = await db.get(STORES.dividas, Number(alunoId));
   return row?.payload || null;
+}
+
+/**
+ * Pré-cacheia dívidas pendentes de TODOS os alunos com saldo em aberto.
+ * Chamado no warmup pós-login. Fire-and-forget — se falhar, o operador apenas
+ * verá o aviso "sem dívidas cacheadas" quando tocar num aluno offline (mesmo
+ * comportamento que existia antes).
+ */
+export async function syncDividasSnapshot() {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+  const db = await getDb();
+  let cursor = 0;
+  let total = 0;
+  const startedAt = Date.now();
+  try {
+    while (true) {
+      const r = await api.get("/offline/dividas-snapshot", { params: { cursor, limit: 100 } });
+      const items = Array.isArray(r.data?.items) ? r.data.items : [];
+      if (items.length === 0) break;
+
+      const tx = db.transaction(STORES.dividas, "readwrite");
+      for (const it of items) {
+        if (it?.aluno_id == null || !it.payload) continue;
+        tx.store.put({
+          aluno_id: Number(it.aluno_id),
+          payload: it.payload,
+          cached_at: Date.now(),
+          from_snapshot: true,  // diferencia de cache "fresca" via escolherAluno
+        });
+      }
+      await tx.done;
+      total += items.length;
+
+      const next = r.data?.next_cursor;
+      if (next == null) break;
+      cursor = next;
+    }
+    await setMeta(DIVIDAS_META_KEY, { at: Date.now(), total, ms: Date.now() - startedAt });
+    if (typeof console !== "undefined") {
+      console.debug("[Educajá] snapshot de dívidas sincronizado", { total, ms: Date.now() - startedAt });
+    }
+  } catch (e) {
+    if (typeof console !== "undefined") {
+      console.warn("[Educajá] falha a sincronizar snapshot de dívidas:", e?.message || e);
+    }
+  }
+}
+
+export async function getDividasSnapshotMeta() {
+  return getMeta(DIVIDAS_META_KEY);
 }

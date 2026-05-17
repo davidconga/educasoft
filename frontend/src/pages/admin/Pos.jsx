@@ -47,6 +47,7 @@ export default function Pos() {
   const [refCheck, setRefCheck] = useState({ status: "idle", data: null }); // idle | checking | livre | usada | erro
   const [acao, setAcao]       = useState(false);
   const [erro, setErro]       = useState(null);
+  const [aviso, setAviso]     = useState(null);   // mensagens informativas (modo offline, etc.) — não bloqueiam
   const [ultimoLote, setUltimoLote] = useState(null);
   const [filtros, setFiltros] = useState({ tipo: "", mes: "", soVencidas: false });
   const [showAbrir, setShowAbrir] = useState(false);
@@ -176,11 +177,13 @@ export default function Pos() {
 
   const escolherAluno = async (a) => {
     setQuery(""); setResultados([]); setSelected([]);
-    setErro(null); setValorCarteira("");
+    setErro(null); setAviso(null); setValorCarteira("");
     const carregarLocal = async () => {
       const cached = await getDividasLocal(a.id);
       if (cached) {
         aplicarDividasPayload(cached, { offline: true });
+        // Aviso suave: dados podem estar ligeiramente desactualizados.
+        setAviso("Modo offline — a mostrar dívidas em cache. Vão sincronizar quando voltar a internet.");
         return true;
       }
       // Sem cache: monta um payload mínimo a partir do snapshot da pesquisa,
@@ -192,7 +195,7 @@ export default function Pos() {
         saldo_carteira: 0,
         lotes_recentes: [],
       }, { offline: true });
-      setErro("Aluno em modo offline sem dívidas cacheadas. Apenas é possível criar uma cobrança nova.");
+      setAviso("Sem dívidas em cache para este aluno (offline). Podes criar uma cobrança nova — vai para a fila e sincroniza ao voltar online.");
       return true;
     };
     const isOffline = typeof navigator !== "undefined" && navigator.onLine === false;
@@ -402,7 +405,7 @@ export default function Pos() {
 
   const fecharAluno = () => {
     setAluno(null); setDividas([]); setSelected([]); setValorEntregue(""); setUltimoLote(null);
-    setLotesRecentes([]); setSaldoCarteira(0);
+    setLotesRecentes([]); setSaldoCarteira(0); setAviso(null);
     inputRef.current?.focus();
   };
 
@@ -750,6 +753,15 @@ export default function Pos() {
           <AlertCircle size={16} className="mt-0.5 shrink-0"/>
           <div className="flex-1">{erro}</div>
           <button onClick={() => setErro(null)} className="text-red-500 hover:text-red-700">
+            <X size={14}/>
+          </button>
+        </div>
+      )}
+      {aviso && !erro && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl text-sm flex items-start gap-2">
+          <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-600"/>
+          <div className="flex-1">{aviso}</div>
+          <button onClick={() => setAviso(null)} className="text-amber-600 hover:text-amber-800">
             <X size={14}/>
           </button>
         </div>

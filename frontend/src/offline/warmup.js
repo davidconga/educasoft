@@ -1,6 +1,6 @@
 import api from "../services/api";
 import { setMeta, getMeta } from "./db";
-import { syncAlunosSnapshot } from "./alunos";
+import { syncAlunosSnapshot, syncDividasSnapshot } from "./alunos";
 
 /**
  * Aquece a cache do service worker com leituras frequentemente usadas pelo
@@ -48,9 +48,11 @@ export async function warmupCache(userTipo) {
   });
 
   // Snapshot de alunos para pesquisa local offline (apenas para utilizadores
-  // que efectivamente usam o POS / pesquisa de alunos).
+  // que efectivamente usam o POS / pesquisa de alunos). A seguir, snapshot
+  // de dívidas para evitar o aviso "sem dívidas cacheadas" quando o operador
+  // tocar num aluno offline pela primeira vez.
   if (userTipo === "admin") {
-    syncAlunosSnapshot();
+    syncAlunosSnapshot().then(() => syncDividasSnapshot());
   }
 }
 
