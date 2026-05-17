@@ -2,14 +2,16 @@ import { openDB } from "idb";
 
 const DB_NAME = "educaja-offline";
 // v2: adicionada store `alunos` (snapshot pesquisável offline) + `dividas` por aluno.
-const DB_VERSION = 2;
+// v3: adicionada store `operators` para login offline (sessão encriptada por operador).
+const DB_VERSION = 3;
 
 export const STORES = {
-  outbox:  "outbox",   // Escritas pendentes de envio
-  cache:   "cache",    // Snapshot de leituras (key/value)
-  meta:    "meta",     // Estado da app (last_sync, user_id, etc)
-  alunos:  "alunos",   // Snapshot de alunos (id, nome, numero_aluno, turma) p/ pesquisa local
-  dividas: "dividas",  // Cache de `/pos/alunos/{id}/dividas` por aluno_id
+  outbox:    "outbox",    // Escritas pendentes de envio
+  cache:     "cache",     // Snapshot de leituras (key/value)
+  meta:      "meta",      // Estado da app (last_sync, user_id, etc)
+  alunos:    "alunos",    // Snapshot de alunos (id, nome, numero_aluno, turma) p/ pesquisa local
+  dividas:   "dividas",   // Cache de `/pos/alunos/{id}/dividas` por aluno_id
+  operators: "operators", // Operadores autorizados a entrar offline neste dispositivo
 };
 
 let dbPromise = null;
@@ -37,6 +39,12 @@ export function getDb() {
         }
         if (!db.objectStoreNames.contains(STORES.dividas)) {
           db.createObjectStore(STORES.dividas, { keyPath: "aluno_id" });
+        }
+        // v3
+        if (!db.objectStoreNames.contains(STORES.operators)) {
+          const s = db.createObjectStore(STORES.operators, { keyPath: "id" });
+          s.createIndex("email", "email");
+          s.createIndex("escola_codigo", "escola_codigo");
         }
       },
     });
