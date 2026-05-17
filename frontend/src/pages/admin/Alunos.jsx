@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { Search, UserPlus, Camera, X, AlertCircle, KeyRound, Eye, EyeOff, CheckCircle, Printer, Filter, ChevronDown } from "lucide-react";
 import api from "../../services/api";
+import { useCachedApi } from "../../hooks/useCachedApi";
 
 function Avatar({ aluno, size = "md", onUpload }) {
   const ref = useRef();
@@ -88,11 +89,16 @@ export default function Alunos() {
   const [uploadingId, setUploadingId] = useState(null);
   const [showFiltros, setShowFiltros] = useState(false);
 
-  // Filtros avançados
-  const [turmas,   setTurmas]   = useState([]);
-  const [cursos,   setCursos]   = useState([]);
-  const [classes,  setClasses]  = useState([]);
-  const [turnos,   setTurnos]   = useState([]);
+  // Filtros avançados — dropdowns lidos via useCachedApi (cache local quando
+  // offline, evita ficarem vazios e impedirem a aplicação de filtros).
+  const { data: turmasRaw }   = useCachedApi("/turmas");
+  const { data: cursosRaw }   = useCachedApi("/cursos");
+  const { data: classesRaw }  = useCachedApi("/classes");
+  const { data: turnosRaw }   = useCachedApi("/turnos");
+  const turmas   = Array.isArray(turmasRaw)  ? turmasRaw  : (turmasRaw?.data ?? []);
+  const cursos   = Array.isArray(cursosRaw)  ? cursosRaw  : (cursosRaw?.data ?? []);
+  const classes  = Array.isArray(classesRaw) ? classesRaw : (classesRaw?.data ?? []);
+  const turnos   = Array.isArray(turnosRaw)  ? turnosRaw  : (turnosRaw?.data ?? []);
   const [filtro, setFiltro] = useState({
     turma_id: "", curso_id: "", classe_id: "", turno_id: "", status: "", genero: "", ano_letivo: ""
   });
@@ -112,21 +118,26 @@ export default function Alunos() {
   const [meta,         setMeta]         = useState(null);
   const [escola,       setEscola]       = useState(null);
 
+  // Escola: mantida em api.get porque hoje só serve para o cabeçalho do PDF de impressão
+  // — uma falha offline é tolerável (PDF não é uso primário).
   useEffect(() => {
-    api.get("/turmas").then(r => setTurmas(r.data ?? []));
-    api.get("/cursos").then(r => setCursos(r.data?.data ?? r.data ?? []));
-    api.get("/classes").then(r => setClasses(r.data ?? []));
-    api.get("/turnos").then(r => setTurnos(r.data ?? []));
     api.get("/configuracoes/escola").then(r => setEscola(r.data)).catch(() => {});
   }, []);
 
   const load = useCallback(async (q = search, f = filtro) => {
     setLoading(true);
     const params = { search: q, per_page: 100, ...Object.fromEntries(Object.entries(f).filter(([,v]) => v)) };
-    const { data } = await api.get("/alunos", { params });
-    setAlunos(data.data || data);
-    setMeta(data.meta ?? null);
-    setLoading(false);
+    try {
+      const { data } = await api.get("/alunos", { params });
+      setAlunos(data.data || data);
+      setMeta(data.meta ?? null);
+    } catch (e) {
+      // Offline ou rede caída → mantém a lista anterior (não apaga o que já estava em cache do SW).
+      // O SW serve o último GET de `/alunos` se houver. Se for a 1ª visita offline, lista fica vazia.
+      if (e?.response) setError(e.response?.data?.message || "Erro a carregar alunos.");
+    } finally {
+      setLoading(false);
+    }
   }, [search, filtro]);
 
   useEffect(() => { load(); }, []);

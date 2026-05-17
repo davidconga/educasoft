@@ -61,6 +61,8 @@ class OfflineController extends Controller
             ],
             // Lista de URLs que o cliente deve pré-carregar para ficar utilizável offline.
             // Mantida no servidor para podermos ajustar sem novo deploy do frontend.
+            // Inclui leituras P0 (dashboard/caixa/precário) e P1 (cascatas académicas
+            // que alimentam Alunos.jsx, Notas, Presenças, Horários).
             "warmup_urls" => [
                 "/dashboard",
                 "/caixa/actual",
@@ -68,6 +70,12 @@ class OfflineController extends Controller
                 "/precario/emolumentos",
                 "/configuracoes/escola",
                 "/meses",
+                "/turmas",
+                "/cursos",
+                "/classes",
+                "/turnos",
+                "/disciplinas",
+                "/professores",
             ],
         ]);
     }

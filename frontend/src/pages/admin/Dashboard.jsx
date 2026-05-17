@@ -1,12 +1,11 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Users, GraduationCap, LayoutGrid, Video,
   Banknote, AlertCircle, ArrowRight, BookOpen,
   Calendar, Clock, Sparkles,
 } from "lucide-react";
-import api from "../../services/api";
 import { useAuthStore } from "../../store/auth";
+import { useCachedApi } from "../../hooks/useCachedApi";
 
 const cards = [
   { key: "total_alunos",          label: "Alunos",          href: "/alunos",        icon: Users,         color: "blue"    },
@@ -147,17 +146,14 @@ function greeting() {
 }
 
 export default function Dashboard() {
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
   const { user } = useAuthStore();
-
-  useEffect(() => {
-    api.get("/dashboard").then(r => setStats(r.data)).finally(() => setLoading(false));
-  }, []);
+  // Stale-while-revalidate: cache renderiza primeiro, depois substituído por live.
+  // Em offline, mantém o último dashboard cacheado em vez de skeleton infinito.
+  const { data: stats, loading, fromCache } = useCachedApi("/dashboard");
 
   const today = new Date().toLocaleDateString("pt-AO", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
-  if (loading) return <Skeleton />;
+  if (loading && !stats) return <Skeleton />;
   if (!stats) return null;
 
   return (

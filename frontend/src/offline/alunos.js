@@ -155,3 +155,28 @@ export async function syncDividasSnapshot() {
 export async function getDividasSnapshotMeta() {
   return getMeta(DIVIDAS_META_KEY);
 }
+
+/**
+ * Refresca os snapshots (alunos + dívidas) quando voltar a internet.
+ * Throttled: só corre se já passaram >= 60s do último sync (evita martelar
+ * o servidor em ambientes com rede a piscar). Idempotente.
+ */
+let lastRefreshAt = 0;
+let installed = false;
+export function installSnapshotRefresh() {
+  if (installed || typeof window === "undefined") return;
+  installed = true;
+  const maybeRefresh = async () => {
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    if (Date.now() - lastRefreshAt < 60_000) return;
+    lastRefreshAt = Date.now();
+    try {
+      await syncAlunosSnapshot();
+      await syncDividasSnapshot();
+    } catch { /* ignore */ }
+  };
+  window.addEventListener("online", maybeRefresh);
+  // Refresh periódico (15min) — apanha alterações feitas noutro dispositivo
+  // mesmo sem o ciclo offline/online ter disparado.
+  setInterval(maybeRefresh, 15 * 60 * 1000);
+}
