@@ -1,12 +1,19 @@
 import axios from "axios";
 
+// Timeout explícito: sem isto, axios espera indefinidamente se navigator.onLine
+// === true mas a rede está morta (WiFi fraco, captive portal, servidor hung).
+// Resultado: sendOrEnqueue nunca apanha erro de rede e nunca cai para a outbox.
+const REQUEST_TIMEOUT_MS = 12000;
+
 const api = axios.create({
   baseURL: "/api/tenant",
+  timeout: REQUEST_TIMEOUT_MS,
   headers: { "Content-Type": "application/json", "Accept": "application/json" },
 });
 
 const centralApi = axios.create({
   baseURL: "/api/v1",
+  timeout: REQUEST_TIMEOUT_MS,
   headers: { "Content-Type": "application/json", "Accept": "application/json" },
 });
 

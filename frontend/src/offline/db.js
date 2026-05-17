@@ -54,3 +54,16 @@ export async function getMeta(key) {
   const row = await db.get(STORES.meta, key);
   return row?.value;
 }
+
+// Cache genérica de respostas (key arbitrária, valor JSON). Usada por páginas
+// que precisam de mostrar dados offline mas não querem depender só do SW.
+export async function setCache(key, value) {
+  const db = await getDb();
+  await db.put(STORES.cache, { key, value, at: Date.now() });
+}
+
+export async function getCache(key) {
+  const db = await getDb();
+  const row = await db.get(STORES.cache, key);
+  return row ? { value: row.value, at: row.at } : null;
+}

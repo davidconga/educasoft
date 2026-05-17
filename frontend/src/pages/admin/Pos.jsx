@@ -10,6 +10,7 @@ import ModalVerificarAcademicos from "../../components/ModalVerificarAcademicos"
 import { enqueuePosCobranca, enqueueCriarPagamento } from "../../offline/pos";
 import { sendOrEnqueue } from "../../offline/sendOrEnqueue";
 import { searchAlunosLocal, getDividasLocal, cacheDividas } from "../../offline/alunos";
+import { setCache, getCache } from "../../offline/db";
 
 const fmt = (v) => Number(v || 0).toLocaleString("pt-PT") + " Kz";
 
@@ -79,13 +80,57 @@ export default function Pos() {
 
   const inputRef = useRef();
 
-  // Carrega sessão activa
+  // Carrega sessão activa + precário. Online refresca a cache; offline lê-a.
+  // Sem o fallback, /precario/propinas e /emolumentos falhavam silenciosamente
+  // offline e o formulário "Criar Cobrança Nova" ficava com dropdowns vazios.
   useEffect(() => {
-    api.get("/caixa/actual")
-      .then(r => setSessao(r.data || null))
-      .finally(() => setCarregaSessao(false));
-    api.get("/precario/propinas").then(r => setPropinas(r.data || [])).catch(() => {});
-    api.get("/precario/emolumentos").then(r => setEmolumentos(r.data || [])).catch(() => {});
+    let cancelado = false;
+    const carregarPropinas = async () => {
+      try {
+        const r = await api.get("/precario/propinas");
+        if (cancelado) return;
+        const dados = r.data || [];
+        setPropinas(dados);
+        setCache("pos:propinas", dados).catch(() => {});
+      } catch (e) {
+        if (e?.response) return; // erro do servidor → não tocar no estado
+        const c = await getCache("pos:propinas").catch(() => null);
+        if (!cancelado && c?.value) setPropinas(c.value);
+      }
+    };
+    const carregarEmolumentos = async () => {
+      try {
+        const r = await api.get("/precario/emolumentos");
+        if (cancelado) return;
+        const dados = r.data || [];
+        setEmolumentos(dados);
+        setCache("pos:emolumentos", dados).catch(() => {});
+      } catch (e) {
+        if (e?.response) return;
+        const c = await getCache("pos:emolumentos").catch(() => null);
+        if (!cancelado && c?.value) setEmolumentos(c.value);
+      }
+    };
+    const carregarSessao = async () => {
+      try {
+        const r = await api.get("/caixa/actual");
+        if (cancelado) return;
+        setSessao(r.data || null);
+        setCache("pos:caixa_actual", r.data || null).catch(() => {});
+      } catch (e) {
+        if (e?.response) return; // ex.: 401 já tratado pelo interceptor
+        // Sem rede: tenta último snapshot. Pode estar stale mas é melhor do
+        // que mostrar "Sem caixa aberta" quando o operador acabou de a abrir online.
+        const c = await getCache("pos:caixa_actual").catch(() => null);
+        if (!cancelado && c?.value?.id) setSessao(c.value);
+      } finally {
+        if (!cancelado) setCarregaSessao(false);
+      }
+    };
+    carregarSessao();
+    carregarPropinas();
+    carregarEmolumentos();
+    return () => { cancelado = true; };
   }, []);
 
   // Procura aluno (debounced). Online: API. Offline / falha de rede: cache IndexedDB.

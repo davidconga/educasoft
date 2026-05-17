@@ -3,6 +3,7 @@ import { Wallet, Lock, Unlock, ArrowDownCircle, ArrowUpCircle, Receipt, FileText
 import api from "../../services/api";
 import { useAuthStore } from "../../store/auth";
 import { sendOrEnqueue } from "../../offline/sendOrEnqueue";
+import { setCache, getCache } from "../../offline/db";
 
 const fmt = (v) => Number(v || 0).toLocaleString("pt-PT") + " Kz";
 const fmtDate = (d) => d ? new Date(d).toLocaleString("pt-PT") : "—";
@@ -26,6 +27,7 @@ export default function Caixa() {
   const [movimentos, setMovimentos] = useState([]);
   const [acaoLoading, setAcaoLoading] = useState(false);
   const [erro, setErro] = useState(null);
+  const [aviso, setAviso] = useState(null);  // mensagens informativas (ex.: "enfileirado offline")
 
   // Modais
   const [showAbrir, setShowAbrir] = useState(false);
@@ -51,8 +53,13 @@ export default function Caixa() {
     return { de: null, ate: null };
   };
 
+  // Chave de cache derivada dos filtros (período + operador). Permite ter
+  // múltiplas vistas em cache simultâneas e voltar a elas offline.
+  const cacheKey = () => `caixa:hist:${periodo}:${filtroOperador || "all"}`;
+
   const carregar = async () => {
     setLoading(true);
+    const offline = typeof navigator !== "undefined" && navigator.onLine === false;
     try {
       const datas = calcDatas(periodo);
       const params = {};
@@ -77,17 +84,42 @@ export default function Caixa() {
       } else {
         setResumo(null); setMovimentos([]);
       }
+      // Snapshot para uso offline na próxima visita.
+      setCache(cacheKey(), {
+        actual: sessaoActual,
+        historico: hRes.data?.data || [],
+        resumoAgregado: rRes.data || null,
+      }).catch(() => {});
     } catch (e) {
-      setErro(e.response?.data?.message || "Erro a carregar caixa.");
+      // Offline ou rede caída → tenta servir do snapshot local em vez de bloquear a UI.
+      const isNetwork = !e?.response;
+      if (isNetwork) {
+        const cached = await getCache(cacheKey()).catch(() => null);
+        if (cached?.value) {
+          setActual(cached.value.actual || null);
+          setHistorico(cached.value.historico || []);
+          setResumoAgregado(cached.value.resumoAgregado || null);
+          setResumo(null); setMovimentos([]);
+          setErro(offline
+            ? "Sem rede — a mostrar último snapshot. Acções (fechar caixa, sangria, reforço) serão sincronizadas quando voltar a internet."
+            : "Falha de rede — a mostrar dados cacheados.");
+        } else {
+          setErro(offline
+            ? "Sem rede e sem dados cacheados. Abre a página uma vez online para preparar o modo offline."
+            : "Falha de rede a carregar caixa.");
+        }
+      } else {
+        setErro(e.response?.data?.message || "Erro a carregar caixa.");
+      }
     } finally { setLoading(false); }
   };
 
   useEffect(() => { carregar(); }, [periodo, filtroOperador]);
 
   const flash = (m, t = "ok") => {
-    setErro(t === "err" ? m : null);
-    if (t === "ok") { /* feedback silencioso */ }
-    setTimeout(() => setErro(null), 4000);
+    if (t === "err") { setErro(m); setAviso(null); }
+    else             { setAviso(m); setErro(null); }
+    setTimeout(() => { setErro(null); setAviso(null); }, 6000);
   };
 
   const abrir = async () => {
@@ -108,9 +140,26 @@ export default function Caixa() {
       setShowAbrir(false);
       setFormAbrir({ fundo_inicial: "", nome_caixa: "", observacoes_abertura: "" });
       if (r.queued) {
+        // Sessão sintética para a UI funcionar até a outbox sincronizar.
+        // Mesma estratégia usada em Pos.jsx :: abrirCaixaRapida().
+        const agora = new Date();
+        const ymd = agora.toISOString().slice(0,10).replace(/-/g,"");
+        setActual({
+          id:             "tmp-caixa-" + agora.getTime(),
+          codigo:         `OFF-CX-${ymd}-${String(agora.getTime()).slice(-3)}`,
+          operador_id:    user?.id ?? null,
+          operador_nome:  user?.nome || "(offline)",
+          nome_caixa:     payload.nome_caixa || "Caixa (offline)",
+          fundo_inicial:  payload.fundo_inicial,
+          total_esperado: payload.fundo_inicial,
+          abriu_em:       agora.toISOString(),
+          status:         "aberta",
+          _offline:       true,
+        });
         flash("Sem rede: a abertura ficou na fila offline. A caixa será criada quando voltar a internet.", "ok");
+      } else {
+        await carregar();
       }
-      await carregar();
     } catch (e) {
       flash(e.response?.data?.message || "Falha ao abrir caixa.", "err");
     } finally { setAcaoLoading(false); }
@@ -125,13 +174,28 @@ export default function Caixa() {
     }
     setAcaoLoading(true);
     try {
-      await api.post(`/caixa/${actual.id}/fechar`, {
-        total_contado: Number(formFechar.total_contado || 0),
-        observacoes_fecho: formFechar.observacoes_fecho || null,
+      // Nota: se `actual.id` começa por "tmp-caixa-" (caixa aberta offline ainda
+      // não sincronizada), a entrada da outbox ficará bloqueada à espera do
+      // mapping de IDs vindo do `caixa.abrir` original — comportamento OK.
+      const r = await sendOrEnqueue({
+        method: "POST",
+        url: `/caixa/${actual.id}/fechar`,
+        data: {
+          total_contado: Number(formFechar.total_contado || 0),
+          observacoes_fecho: formFechar.observacoes_fecho || null,
+        },
+        meta: { tipo: "caixa_fechar", sessao_id: actual.id },
+        label: `Fechar caixa ${actual.codigo || actual.id}`,
       });
       setShowFechar(false);
       setFormFechar({ total_contado: "", observacoes_fecho: "" });
-      await carregar();
+      if (r.queued) {
+        flash("Sem rede: o fecho ficou na fila offline e será aplicado quando voltar a internet.", "ok");
+        // Optimisticamente esconde a sessão como se já estivesse fechada localmente.
+        setActual(null);
+      } else {
+        await carregar();
+      }
     } catch (e) {
       flash(e.response?.data?.message || "Falha ao fechar.", "err");
     } finally { setAcaoLoading(false); }
@@ -141,14 +205,25 @@ export default function Caixa() {
     if (!actual?.id || !showMov) return;
     setAcaoLoading(true);
     try {
-      await api.post(`/caixa/${actual.id}/${showMov}`, {
-        valor: Number(formMov.valor || 0),
-        metodo: formMov.metodo,
-        descricao: formMov.descricao,
+      const valorNum = Number(formMov.valor || 0);
+      const r = await sendOrEnqueue({
+        method: "POST",
+        url: `/caixa/${actual.id}/${showMov}`,
+        data: {
+          valor: valorNum,
+          metodo: formMov.metodo,
+          descricao: formMov.descricao,
+        },
+        meta: { tipo: `caixa_${showMov}`, sessao_id: actual.id, valor: valorNum },
+        label: `${TIPO_LABEL[showMov]?.label || showMov} · ${valorNum.toLocaleString("pt-PT")} Kz`,
       });
       setShowMov(null);
       setFormMov({ valor: "", metodo: "dinheiro", descricao: "" });
-      await carregar();
+      if (r.queued) {
+        flash("Sem rede: o movimento ficou na fila offline e será registado quando voltar a internet.", "ok");
+      } else {
+        await carregar();
+      }
     } catch (e) {
       flash(e.response?.data?.message || "Falha ao registar.", "err");
     } finally { setAcaoLoading(false); }
@@ -196,6 +271,9 @@ export default function Caixa() {
 
       {erro && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">{erro}</div>
+      )}
+      {aviso && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl text-sm">{aviso}</div>
       )}
 
       {/* Sessão activa */}
