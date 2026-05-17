@@ -27,6 +27,11 @@ empacotamentos (Electron, Capacitor) reutilizam essa mesma camada.
 Para build cruzada em Linux para Windows é preciso Wine.
 
 ```bash
+# Pré-requisito (uma vez): wine32:i386 para o electron-builder stampar
+# ícone/version no .exe via rcedit.exe (corre em Wine).
+sudo dpkg --add-architecture i386
+sudo apt-get update && sudo apt-get install -y wine32:i386
+
 # 1) Build do frontend (gera dist/ com service worker)
 cd frontend
 npm install --legacy-peer-deps
@@ -35,8 +40,13 @@ npm run build
 # 2) Build do instalador
 cd ../electron
 npm install
-npm run build:win     # → dist/Educajá-Setup-1.1.0.exe + portable .exe
-npm run build:linux   # → dist/Educajá-1.1.0.AppImage
+npm run build:win     # → dist/Educaja-Setup-1.1.0.exe (NSIS) + Educaja-Portable-1.1.0.exe
+npm run build:linux   # → dist/Educaja-1.1.0.AppImage
+
+# 3) Publicar em backend/public/downloads/ (servido por nginx alias)
+cp dist/Educaja-Setup-1.1.0.exe       ../backend/public/downloads/educa-windows-setup.exe
+cp dist/Educaja-Portable-1.1.0.exe    ../backend/public/downloads/educa-windows-portable.exe
+cp dist/Educaja-1.1.0.AppImage        ../backend/public/downloads/educa-linux.AppImage
 ```
 
 O Electron carrega `https://educaja.ao` por defeito; quando o utilizador abre a app

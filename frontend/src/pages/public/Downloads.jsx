@@ -1,4 +1,4 @@
-import { Smartphone, Monitor, Apple, Download, GraduationCap } from "lucide-react";
+import { Smartphone, Monitor, Apple, Download, GraduationCap, HardDrive } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useBranding } from "../../hooks/useBranding";
 
@@ -16,27 +16,51 @@ const APPS = [
     badge: "APK",
   },
   {
-    id: "windows",
+    id: "windows-setup",
     icon: Monitor,
-    title: "Windows",
-    subtitle: "Aplicação desktop — Windows 10/11",
-    desc: "Versão portátil para Windows. Extraia o ficheiro e execute Educa.exe — não requer instalação.",
-    href: "/downloads/educa-windows.zip",
-    filename: "educa-windows.zip",
-    available: false,
+    title: "Windows (Instalador)",
+    subtitle: "NSIS Setup — Windows 10/11 x64",
+    desc: "Instala a aplicação com atalhos no menu Iniciar e ambiente de trabalho. Recomendado para utilizadores fixos.",
+    href: "/downloads/educa-windows-setup.exe",
+    filename: "Educaja-Setup-1.1.0.exe",
+    available: true,
     color: "from-blue-500 to-blue-700",
-    badge: "Em breve",
+    badge: "EXE",
+  },
+  {
+    id: "windows-portable",
+    icon: HardDrive,
+    title: "Windows (Portátil)",
+    subtitle: "EXE portátil — sem instalação",
+    desc: "Execute directamente, sem instalar nada. Ideal para pen-drives e dispositivos partilhados.",
+    href: "/downloads/educa-windows-portable.exe",
+    filename: "Educaja-Portable-1.1.0.exe",
+    available: true,
+    color: "from-sky-500 to-blue-600",
+    badge: "Portable",
+  },
+  {
+    id: "linux",
+    icon: Monitor,
+    title: "Linux",
+    subtitle: "AppImage — qualquer distro x64",
+    desc: "Descarregue, dê permissão de execução (chmod +x) e execute. Não precisa de instalação.",
+    href: "/downloads/educa-linux.AppImage",
+    filename: "Educaja-1.1.0.AppImage",
+    available: true,
+    color: "from-amber-500 to-orange-600",
+    badge: "AppImage",
   },
   {
     id: "ios",
     icon: Apple,
     title: "iOS",
     subtitle: "iPhone & iPad — iOS 14+",
-    desc: "A versão para iOS está em desenvolvimento. Entretanto pode aceder via Safari em educaja.ao.",
+    desc: "A versão para iOS exige conta Apple Developer e build em macOS. Entretanto pode usar pelo Safari em educaja.ao (suporta instalar como PWA pelo menu Partilhar → Adicionar ao Ecrã principal).",
     href: null,
     available: false,
     color: "from-slate-500 to-slate-700",
-    badge: "Em breve",
+    badge: "Via Safari",
   },
 ];
 

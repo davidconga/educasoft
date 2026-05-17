@@ -22,14 +22,14 @@
         { "target": "nsis", "arch": ["x64"] },
         { "target": "portable", "arch": ["x64"] }
       ],
-      "icon": "icon.ico",
-      "artifactName": "${productName}-Setup-${version}.${ext}"
+      "icon": "icon.ico"
     },
     "linux": {
       "target": [{ "target": "AppImage", "arch": ["x64"] }],
       "icon": "icon.png",
       "category": "Office",
-      "synopsis": "Plataforma de gestão escolar Educajá"
+      "synopsis": "Plataforma de gestão escolar Educajá",
+      "artifactName": "Educaja-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -41,7 +41,11 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Educajá",
-      "installerLanguages": ["pt_PT"]
+      "installerLanguages": ["pt_PT"],
+      "artifactName": "Educaja-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Educaja-Portable-${version}.${ext}"
     }
   },
   "devDependencies": {

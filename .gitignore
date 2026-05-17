@@ -8,6 +8,12 @@ electron/out/
 frontend/dist/
 frontend/build/
 
+# Binários da app desktop (Windows .exe, Linux AppImage) — gerados via
+# `cd electron && npm run build:win build:linux` e copiados manualmente
+# para backend/public/downloads/. Demasiado grandes para git (~80-110MB cada).
+backend/public/downloads/*.exe
+backend/public/downloads/*.AppImage
+
 # Capacitor / mobile (gerados)
 frontend/android/
 frontend/ios/
