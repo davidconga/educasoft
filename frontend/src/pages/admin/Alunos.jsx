@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Search, UserPlus, Camera, X, AlertCircle, KeyRound, Eye, EyeOff, CheckCircle, Printer, Filter, ChevronDown } from "lucide-react";
 import api from "../../services/api";
 import { useCachedApi } from "../../hooks/useCachedApi";
+import { searchAlunosLocal, getAllAlunosLocal } from "../../offline/alunos";
 
 function Avatar({ aluno, size = "md", onUpload }) {
   const ref = useRef();
@@ -132,9 +133,22 @@ export default function Alunos() {
       setAlunos(data.data || data);
       setMeta(data.meta ?? null);
     } catch (e) {
-      // Offline ou rede caída → mantém a lista anterior (não apaga o que já estava em cache do SW).
-      // O SW serve o último GET de `/alunos` se houver. Se for a 1ª visita offline, lista fica vazia.
-      if (e?.response) setError(e.response?.data?.message || "Erro a carregar alunos.");
+      if (!e?.response) {
+        // Sem rede → snapshot local. Filtros do servidor não se aplicam ao
+        // snapshot enxuto; só filtramos por busca textual. O operador vê
+        // todos os alunos cacheados (com aviso no canto via OfflineBanner).
+        try {
+          const locais = q
+            ? await searchAlunosLocal(q, 200, { rich: true })
+            : await getAllAlunosLocal({ limit: 200 });
+          setAlunos(locais);
+          setMeta({ total: locais.length, _offline: true });
+        } catch {
+          setAlunos([]); setMeta(null);
+        }
+      } else {
+        setError(e.response?.data?.message || "Erro a carregar alunos.");
+      }
     } finally {
       setLoading(false);
     }

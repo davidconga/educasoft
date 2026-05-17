@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Wallet, ArrowDownCircle, ArrowUpCircle, Search } from "lucide-react";
 import api from "../../services/api";
+import { searchAlunosLocal } from "../../offline/alunos";
 
 const STATUS_BADGE = {
   pago:      "bg-green-100 text-green-700",
@@ -28,9 +29,21 @@ export default function CarteiraAluno() {
 
   useEffect(() => {
     if (busca.length < 2) { setAlunos([]); return; }
-    const t = setTimeout(() => {
-      api.get("/alunos", { params: { search: busca, per_page: 10 } })
-        .then(r => setAlunos(r.data.data || r.data));
+    const t = setTimeout(async () => {
+      const useLocal = async () => {
+        try {
+          const locais = await searchAlunosLocal(busca, 10, { rich: true });
+          setAlunos(locais);
+        } catch { setAlunos([]); }
+      };
+      const isOffline = typeof navigator !== "undefined" && navigator.onLine === false;
+      if (isOffline) { await useLocal(); return; }
+      try {
+        const r = await api.get("/alunos", { params: { search: busca, per_page: 10 } });
+        setAlunos(r.data.data || r.data);
+      } catch (e) {
+        if (!e?.response) await useLocal(); else setAlunos([]);
+      }
     }, 350);
     return () => clearTimeout(t);
   }, [busca]);

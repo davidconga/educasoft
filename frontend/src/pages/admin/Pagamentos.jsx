@@ -147,8 +147,16 @@ export default function Pagamentos() {
 
   useEffect(() => {
     load();
-    api.get("/alunos").then(r => setAlunos(r.data.data || r.data));
-    api.get("/planos-pagamento").then(r => setPlanos(r.data));
+    api.get("/alunos")
+      .then(r => setAlunos(r.data.data || r.data))
+      .catch(async e => {
+        if (!e?.response) {
+          // offline → snapshot
+          const { getAllAlunosLocal } = await import("../../offline/alunos");
+          try { setAlunos(await getAllAlunosLocal()); } catch { setAlunos([]); }
+        }
+      });
+    api.get("/planos-pagamento").then(r => setPlanos(r.data)).catch(() => {});
   }, [anoFiltro]);
 
   const toggleSelect = (id) =>

@@ -62,7 +62,7 @@ export async function getSnapshotMeta() {
   return getMeta(SNAPSHOT_META_KEY);
 }
 
-export async function searchAlunosLocal(q, limit = 20) {
+export async function searchAlunosLocal(q, limit = 20, { rich = false } = {}) {
   const query = normaliza(q);
   if (!query) return [];
   const db = await getDb();
@@ -85,12 +85,44 @@ export async function searchAlunosLocal(q, limit = 20) {
     }
   }
   matches.sort((x, y) => y.score - x.score);
-  return matches.slice(0, limit).map(m => m.a);
+  const top = matches.slice(0, limit).map(m => m.a);
+  // `rich: true` devolve no formato { user, matriculas } que listagens
+  // administrativas (Carteira, Alunos) esperam. Por defeito mantém o formato
+  // enxuto do snapshot, usado pela pesquisa do POS.
+  return rich ? top.map(snapshotToAlunoEntity) : top;
 }
 
 export async function getAlunoLocal(id) {
   const db = await getDb();
   return db.get(STORES.alunos, Number(id));
+}
+
+/**
+ * Devolve TODOS os alunos do snapshot já no formato que a UI espera
+ * (com `user.nome`, `matriculas[].turma.nome`). Usado por dropdowns e
+ * listas administrativas quando offline.
+ *
+ * Não preenche dados ricos (classe, curso, turno) — só o essencial para
+ * mostrar nome+nº+turma. Quando a rede voltar, os componentes refrescam
+ * com a resposta completa do servidor.
+ */
+export async function getAllAlunosLocal({ limit = 1000 } = {}) {
+  const db = await getDb();
+  const all = await db.getAll(STORES.alunos);
+  return all.slice(0, limit).map(snapshotToAlunoEntity);
+}
+
+function snapshotToAlunoEntity(a) {
+  return {
+    id: a.id,
+    numero_aluno: a.numero_aluno,
+    foto: a.foto,
+    user: { nome: a.nome, email: a.email },
+    matriculas: a.turma
+      ? [{ status: "activa", turma: { nome: a.turma } }]
+      : [],
+    _offline_snapshot: true,
+  };
 }
 
 /** Guarda o payload completo de `/pos/alunos/{id}/dividas` para uso offline. */

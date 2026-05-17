@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Plus, Pencil, Trash2, Search, X, GraduationCap, Ban, RotateCcw, FileText } from "lucide-react";
 import api from "../../services/api";
+import { getAllAlunosLocal } from "../../offline/alunos";
 
 const inp = "w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition";
 const fmt = (v) => Number(v || 0).toLocaleString("pt-AO", { minimumFractionDigits: 2 });
@@ -68,8 +69,15 @@ export default function Bolsas() {
   useEffect(() => { carregar(); }, [status, financiadorFilter]);
 
   useEffect(() => {
-    api.get("/financiadores", { params: { activo: true } }).then(r => setFinList(r.data || []));
-    api.get("/alunos").then(r => setAlunos(r.data || []));
+    api.get("/financiadores", { params: { activo: true } }).then(r => setFinList(r.data || [])).catch(() => {});
+    api.get("/alunos")
+      .then(r => setAlunos(r.data || []))
+      .catch(async e => {
+        if (!e?.response) {
+          // offline → snapshot local
+          try { setAlunos(await getAllAlunosLocal()); } catch { setAlunos([]); }
+        }
+      });
   }, []);
 
   useEffect(() => {
